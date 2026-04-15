@@ -8,12 +8,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadFileToDrive } from "@/lib/feishu";
 import { getSession } from "@/lib/session";
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session.isLoggedIn || !session.user) {
