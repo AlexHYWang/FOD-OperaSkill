@@ -13,6 +13,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "请先登录" }, { status: 401 });
   }
 
+  // 当 MIMO_VERIFY=false 时跳过 AI 校验，直接通过
+  if (process.env.MIMO_VERIFY === "false") {
+    return NextResponse.json({
+      success: true,
+      result: {
+        passed: true,
+        score: 100,
+        missing_points: [],
+        feedback: "已跳过 AI 校验（MIMO_VERIFY=false）",
+        details: {},
+      },
+    });
+  }
+
   try {
     const body = await request.json();
     const { content, step } = body as { content: string; step: 3 | 4 };

@@ -27,6 +27,9 @@ yarn-error.log*
 .env*.local
 .env
 
+# Cursor IDE（计划与本地配置不上传远端）
+.cursor/
+
 # vercel
 .vercel
 

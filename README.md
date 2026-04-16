@@ -57,6 +57,9 @@ FEISHU_APP_SECRET=your_feishu_app_secret
 # 飞书云空间文件夹
 FEISHU_DRIVE_FOLDER_TOKEN=your_folder_token
 
+# 可选：若 metas/batch_query 未返回 url，用「租户域名 + /file/{token}」拼接链接（与浏览器打开飞书时的域名一致，如 https://mi.feishu.cn）
+# FEISHU_DRIVE_FILE_LINK_BASE=https://mi.feishu.cn
+
 # 飞书多维表格（初始化后填入）
 FEISHU_BITABLE_APP_TOKEN=
 FEISHU_TABLE1_ID=

@@ -1,4 +1,4 @@
-// PTP (Purchase to Payment) 流程结构常量
+// 财务部 FOD 端到端流程结构常量
 
 export interface ProcessNode {
   id: string;
@@ -11,73 +11,349 @@ export interface ProcessSection {
   nodes: ProcessNode[];
 }
 
-export const PTP_SECTIONS: ProcessSection[] = [
+export interface E2EProcess {
+  id: string;
+  name: string;
+  shortName: string;
+  color: string;
+  sections: ProcessSection[];
+}
+
+// ─── PTP（含资金） ───
+const PTP_SECTIONS: ProcessSection[] = [
   {
-    id: "contract",
+    id: "ptp_contract",
     name: "合同管理",
-    nodes: [{ id: "contract_review", name: "合同审核" }],
+    nodes: [{ id: "ptp_contract_review", name: "合同审核" }],
   },
   {
-    id: "master_data",
+    id: "ptp_master_data",
     name: "主数据管理",
     nodes: [
-      { id: "master_data_add", name: "主数据新增" },
-      { id: "master_data_change", name: "主数据变更" },
+      { id: "ptp_master_data_add", name: "主数据新增" },
+      { id: "ptp_master_data_change", name: "主数据变更" },
     ],
   },
   {
-    id: "accrual",
+    id: "ptp_accrual",
     name: "预提",
-    nodes: [{ id: "accrual_amortize", name: "预提&摊销&结转" }],
+    nodes: [{ id: "ptp_accrual_amortize", name: "预提&摊销&结转" }],
   },
   {
-    id: "reconciliation",
+    id: "ptp_reconciliation",
     name: "对账结算",
     nodes: [
-      { id: "recon_forward", name: "正向对账" },
-      { id: "recon_return", name: "退货对账" },
-      { id: "recon_exit", name: "退出对账" },
-      { id: "recon_deduct", name: "扣款对账" },
+      { id: "ptp_recon_forward", name: "正向对账" },
+      { id: "ptp_recon_return", name: "退货对账" },
+      { id: "ptp_recon_exit", name: "退出对账" },
+      { id: "ptp_recon_deduct", name: "扣款对账" },
     ],
   },
   {
-    id: "invoice",
+    id: "ptp_invoice",
     name: "发票管理",
     nodes: [
-      { id: "invoice_register", name: "发票登记" },
-      { id: "invoice_verify", name: "发票校验" },
-      { id: "invoice_archive", name: "发票归档" },
+      { id: "ptp_invoice_register", name: "发票登记" },
+      { id: "ptp_invoice_verify", name: "发票校验" },
+      { id: "ptp_invoice_archive", name: "发票归档" },
     ],
   },
   {
-    id: "payment",
+    id: "ptp_payment",
     name: "付款",
     nodes: [
-      { id: "payment_apply", name: "付款申请" },
-      { id: "payment_approve", name: "付款审批" },
-      { id: "payment_plan", name: "资金计划提报" },
-      { id: "payment_execute", name: "资金支付" },
-      { id: "payment_entry", name: "入账" },
-      { id: "payment_clear", name: "清账" },
+      { id: "ptp_payment_apply", name: "付款申请" },
+      { id: "ptp_payment_approve", name: "付款审批" },
+      { id: "ptp_payment_plan", name: "资金计划提报" },
+      { id: "ptp_payment_execute", name: "资金支付" },
+      { id: "ptp_payment_entry", name: "入账" },
+      { id: "ptp_payment_clear", name: "清账" },
     ],
   },
   {
-    id: "other",
+    id: "ptp_other",
     name: "其他",
     nodes: [
-      { id: "month_end", name: "月结核算" },
-      { id: "deposit_receive", name: "保证金收款" },
-      { id: "deposit_refund", name: "保证金退款" },
-      { id: "doc_archive", name: "资料归档" },
-      { id: "doc_provide", name: "资料提供（审计、税务等）" },
+      { id: "ptp_month_end", name: "月结核算" },
+      { id: "ptp_deposit_receive", name: "保证金收款" },
+      { id: "ptp_deposit_refund", name: "保证金退款" },
+      { id: "ptp_doc_archive", name: "资料归档" },
+      { id: "ptp_doc_provide", name: "资料提供（审计、税务等）" },
     ],
   },
 ];
 
-export type TaskLabel =
-  | "pure_manual"
-  | "cross_system"
-  | "not_recommended";
+// ─── OTC（Order to Cash） ───
+const OTC_SECTIONS: ProcessSection[] = [
+  {
+    id: "otc_contract_policy",
+    name: "合同政策管理",
+    nodes: [
+      { id: "otc_rebate_policy", name: "返利政策归集/审核/创建" },
+      { id: "otc_customer_contract", name: "客户合同审核" },
+    ],
+  },
+  {
+    id: "otc_master_data",
+    name: "主数据管理",
+    nodes: [
+      { id: "otc_master_add_change", name: "主数据新增/变更" },
+      { id: "otc_customer_credit", name: "客户信用维护" },
+    ],
+  },
+  {
+    id: "otc_reconciliation",
+    name: "对账结算及核算",
+    nodes: [
+      { id: "otc_recon_forward", name: "正向对账" },
+      { id: "otc_rebate_settle", name: "返利实结" },
+      { id: "otc_revenue_confirm", name: "收入确认" },
+      { id: "otc_revenue_audit", name: "收入稽核" },
+    ],
+  },
+  {
+    id: "otc_accrual",
+    name: "预提",
+    nodes: [{ id: "otc_rebate_accrual", name: "返利预提" }],
+  },
+  {
+    id: "otc_invoice",
+    name: "发票管理",
+    nodes: [
+      { id: "otc_invoice_issue", name: "发票开具" },
+      { id: "otc_invoice_register", name: "发票登记" },
+      { id: "otc_invoice_mail", name: "发票邮寄" },
+      { id: "otc_invoice_archive", name: "票据归档" },
+    ],
+  },
+  {
+    id: "otc_collection",
+    name: "收款",
+    nodes: [
+      { id: "otc_bank_collect", name: "银行收款认领" },
+      { id: "otc_third_recharge", name: "三方账户充值" },
+      { id: "otc_third_withdraw", name: "三方账户提现" },
+      { id: "otc_third_recon", name: "三方账户对账" },
+    ],
+  },
+  {
+    id: "otc_other",
+    name: "其他",
+    nodes: [
+      { id: "otc_month_end", name: "月结核算" },
+      { id: "otc_customer_exit", name: "客户退出结算" },
+      { id: "otc_deposit_receive", name: "保证金收款" },
+      { id: "otc_deposit_refund", name: "保证金退款" },
+      { id: "otc_data_provide", name: "资料提供" },
+    ],
+  },
+];
+
+// ─── RTR（Record to Report） ───
+const RTR_SECTIONS: ProcessSection[] = [
+  {
+    id: "rtr_master_data",
+    name: "主数据管理",
+    nodes: [
+      { id: "rtr_customer_master", name: "客户主数据" },
+      { id: "rtr_vendor_master", name: "供应商主数据" },
+      { id: "rtr_financial_master", name: "财报主数据" },
+      { id: "rtr_mgmt_master", name: "管报主数据" },
+    ],
+  },
+  {
+    id: "rtr_contract",
+    name: "合同管理",
+    nodes: [{ id: "rtr_contract_apply", name: "合同申请" }],
+  },
+  {
+    id: "rtr_reconciliation",
+    name: "对账结算及核算",
+    nodes: [
+      { id: "rtr_recon_forward", name: "正向对账" },
+      { id: "rtr_recon_reverse", name: "逆向对账" },
+      { id: "rtr_revenue_confirm", name: "收入确认" },
+      { id: "rtr_collection_claim", name: "收款认领" },
+      { id: "rtr_other_accounting", name: "其他核算" },
+    ],
+  },
+  {
+    id: "rtr_accrual",
+    name: "预提",
+    nodes: [{ id: "rtr_accrual_amortize", name: "预提&摊销" }],
+  },
+  {
+    id: "rtr_invoice",
+    name: "发票管理",
+    nodes: [
+      { id: "rtr_invoice_issue", name: "发票开具" },
+      { id: "rtr_invoice_register", name: "发票登记" },
+      { id: "rtr_invoice_overdue", name: "欠票归档" },
+    ],
+  },
+  {
+    id: "rtr_payment",
+    name: "付款管理",
+    nodes: [
+      { id: "rtr_payment_apply", name: "付款申请" },
+      { id: "rtr_payment_approve", name: "付款审批" },
+    ],
+  },
+  {
+    id: "rtr_period_end",
+    name: "期末账务核对及检查",
+    nodes: [
+      { id: "rtr_month_end", name: "月结核算" },
+      { id: "rtr_reconcile", name: "对账" },
+      { id: "rtr_review_check", name: "复核检查" },
+    ],
+  },
+  {
+    id: "rtr_report",
+    name: "报表管理",
+    nodes: [
+      { id: "rtr_mgmt_confirm", name: "管报认定" },
+      { id: "rtr_mgmt_alloc", name: "管报分摊" },
+      { id: "rtr_internal_settle", name: "内部结算" },
+      { id: "rtr_diff_adjust", name: "财管差调整" },
+      { id: "rtr_report_compile", name: "财/管报编制&出具" },
+      { id: "rtr_report_check", name: "报表检查" },
+    ],
+  },
+  {
+    id: "rtr_other",
+    name: "其他",
+    nodes: [
+      { id: "rtr_hr_mgmt", name: "人员管理" },
+      { id: "rtr_data_provide", name: "数据/资料提供" },
+      { id: "rtr_fixed_asset", name: "固资盘点" },
+      { id: "rtr_tax_accounting", name: "税金核算" },
+    ],
+  },
+];
+
+// ─── PIC（Production & Inventory Control） ───
+const PIC_SECTIONS: ProcessSection[] = [
+  {
+    id: "pic_order",
+    name: "订单管理",
+    nodes: [
+      { id: "pic_order_create", name: "生产订单创建" },
+      { id: "pic_order_approve", name: "生产订单审核" },
+    ],
+  },
+  {
+    id: "pic_material",
+    name: "物料管理",
+    nodes: [
+      { id: "pic_material_pick", name: "领料" },
+      { id: "pic_material_loss", name: "报损" },
+    ],
+  },
+  {
+    id: "pic_production",
+    name: "生产管理",
+    nodes: [
+      { id: "pic_cost_alloc", name: "费用分摊&成本计提" },
+      { id: "pic_cost_transfer", name: "成本结转" },
+      { id: "pic_wip_count", name: "在制品盘点" },
+      { id: "pic_scrap", name: "生产报废处理" },
+    ],
+  },
+  {
+    id: "pic_inbound",
+    name: "完工入库",
+    nodes: [
+      { id: "pic_inbound_confirm", name: "入库确认" },
+      { id: "pic_defect", name: "不良品处理" },
+    ],
+  },
+  {
+    id: "pic_inventory",
+    name: "存货管理",
+    nodes: [
+      { id: "pic_inv_entry", name: "入账" },
+      { id: "pic_inv_count", name: "存货盘点" },
+      { id: "pic_outbound", name: "出库结账" },
+    ],
+  },
+];
+
+// ─── 税务 ───
+const TAX_SECTIONS: ProcessSection[] = [
+  {
+    id: "tax_invoice",
+    name: "发票管理",
+    nodes: [
+      { id: "tax_invoice_issue", name: "发票开具" },
+      { id: "tax_ctrl_disk", name: "税控盘管理" },
+      { id: "tax_invoice_link", name: "票证关联" },
+    ],
+  },
+  {
+    id: "tax_declaration",
+    name: "申报管理",
+    nodes: [
+      { id: "tax_daily_declare", name: "日常申报" },
+      { id: "tax_annual_declare", name: "年度申报" },
+    ],
+  },
+  {
+    id: "tax_other",
+    name: "其他",
+    nodes: [
+      { id: "tax_stamp_duty", name: "印花税相关合同梳理" },
+      { id: "tax_clearance_cert", name: "完税证明下载" },
+      { id: "tax_credit_review", name: "信用评级复评申请" },
+      { id: "tax_personal_fee", name: "个税手续费返还申请" },
+      { id: "tax_master_data", name: "主数据维护" },
+    ],
+  },
+];
+
+// ─── 五大端到端流程汇总 ───
+export const E2E_PROCESSES: E2EProcess[] = [
+  {
+    id: "ptp",
+    name: "PTP（含资金）",
+    shortName: "PTP",
+    color: "blue",
+    sections: PTP_SECTIONS,
+  },
+  {
+    id: "otc",
+    name: "OTC（Order to Cash）",
+    shortName: "OTC",
+    color: "green",
+    sections: OTC_SECTIONS,
+  },
+  {
+    id: "rtr",
+    name: "RTR（Record to Report）",
+    shortName: "RTR",
+    color: "purple",
+    sections: RTR_SECTIONS,
+  },
+  {
+    id: "pic",
+    name: "PIC（Production & Inventory Control）",
+    shortName: "PIC",
+    color: "orange",
+    sections: PIC_SECTIONS,
+  },
+  {
+    id: "tax",
+    name: "税务",
+    shortName: "税务",
+    color: "red",
+    sections: TAX_SECTIONS,
+  },
+];
+
+// 兼容旧代码（保留 PTP_SECTIONS 导出）
+export { PTP_SECTIONS };
+
+export type TaskLabel = "pure_manual" | "cross_system" | "not_recommended";
 
 export interface LabelOption {
   value: TaskLabel;
@@ -119,10 +395,23 @@ export const TASK_LABELS: LabelOption[] = [
   },
 ];
 
-export const PRESET_TEAMS = ["互联网PTP团队"];
+export const PRESET_TEAMS = [
+  "武汉中心",
+  "北京-采购到付款组",
+  "北京-订单到收款组",
+  "北京-互联网组",
+  "北京-返利组",
+  "北京-总账组",
+  "北京-海外组",
+  "北京-税务组",
+  "成本组",
+  "专项成本组",
+  "财报组",
+  "管报组",
+];
 
-// 第二步准确率门槛
-export const STEP2_MIN_ACCURACY = 90;
+// 第二步准确率门槛（必须达到 100% 才可提交）
+export const STEP2_MIN_ACCURACY = 100;
 
 // 第三步对比报告必须包含的三个分析点
 export const REPORT_REQUIRED_POINTS_STEP3 = [

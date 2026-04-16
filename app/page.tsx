@@ -69,14 +69,14 @@ export default function HomePage() {
       <section className="max-w-5xl mx-auto px-4 py-16 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium mb-6">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-          财务部 FOD 部门 · 互联网PTP团队 · AI技能作业
+          财务部 FOD 部门 · PTP / OTC / RTR / PIC / 税务 · AI 技能作业
         </div>
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
           FOD OperaSkill
           <span className="text-blue-600"> 作业收集平台</span>
         </h1>
         <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
-          PTP 环节同学的 AI 技能（Skill）作业提交与管理平台。完成流程节点映射，逐步生成并验证各日常任务的子 Skill。
+          覆盖 PTP、OTC、RTR、PIC、税务五大端到端流程，为各团队日常任务打标签、生成并验证 AI Skill。
         </p>
 
         {isLoggedIn ? (
@@ -118,20 +118,20 @@ export default function HomePage() {
             number="01"
             icon={<LayoutGrid size={24} />}
             title="Skill↔流程节点映射"
-            description="以 PTP 七大环节为框架，为每个流程节点下的日常任务打上三种标签：纯手工 ★、跨系统 ◆、不建议AI ✕。团队成员共享进度，防止重复填写。"
+            description="覆盖 PTP、OTC、RTR、PIC、税务五大端到端流程，横向看板展示各环节节点，为日常任务打上标签：纯手工 ★、跨系统 ◆、不建议AI ✕，支持批量导入。"
             href="/section1"
             color="blue"
-            items={["合同管理 / 主数据管理 / 预提", "对账结算 / 发票管理 / 付款 / 其他", "支持新增团队，自动加载历史数据"]}
+            items={["PTP / OTC / RTR / PIC / 税务 五大流程", "二维看板，展示任务进度（X/4步）", "支持批量粘贴导入，仅显示★纯手工切换"]}
             isLoggedIn={isLoggedIn}
           />
           <FeatureCard
             number="02"
             icon={<Zap size={24} />}
             title="各团队日常任务 Skill 实战"
-            description="四步顺序工作流，从生成子Skill1到调优子Skill3，每步上传对应文件和准确率。AI自动校验对比报告完整性。"
+            description="四步顺序工作流，从生成子Skill1到调优子Skill3，每步上传对应文件和准确率。第二步准确率须达到100%，方可继续。"
             href="/section2"
             color="purple"
-            items={["第一步：知识库 + 子Skill1 + 初步验证", "第二步：子Skill2（准确率须≥90%）", "第三步：AI校验对比分析报告", "第四步：优化知识库 → 子Skill3"]}
+            items={["第一步：知识库（多文件）+ 子Skill1 + 初步验证", "第二步：子Skill2（准确率须达到100%）", "第三步：上传对比分析报告（.md）", "第四步：优化知识库 → 子Skill3"]}
             isLoggedIn={isLoggedIn}
           />
         </div>
@@ -147,7 +147,7 @@ export default function HomePage() {
               { step: "1", text: "飞书登录", sub: "获取身份认证" },
               { step: "2", text: "选择团队", sub: "加载历史数据" },
               { step: "3", text: "完成任务一", sub: "节点映射打标" },
-              { step: "4", text: "完成任务二", sub: "四步Skill实战" },
+              { step: "4", text: "完成任务二", sub: "四步Skill实战（准确率100%）" },
               { step: "5", text: "数据同步", sub: "自动写入飞书多维表格" },
             ].map((item, i, arr) => (
               <div key={i} className="flex items-center gap-2">

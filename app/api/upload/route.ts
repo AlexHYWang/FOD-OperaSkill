@@ -30,10 +30,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "未收到文件" }, { status: 400 });
     }
 
-    // 文件大小限制：50MB
-    if (file.size > 50 * 1024 * 1024) {
+    // 文件大小限制：100MB
+    if (file.size > 100 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "文件大小超过 50MB 限制" },
+        { error: "文件大小超过 100MB，请将文件压缩为 .zip 后重试" },
         { status: 400 }
       );
     }

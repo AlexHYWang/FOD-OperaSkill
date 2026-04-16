@@ -258,6 +258,35 @@ export async function updateRecord(
 }
 
 // ─────────────────────────────────────────────
+// 云盘：获取可在浏览器打开的网页链接（非 open-apis download，后者需 Token）
+// https://open.feishu.cn/document/server-docs/docs/drive-v1/meta/batch_query
+// ─────────────────────────────────────────────
+async function getDriveFileWebUrl(fileToken: string): Promise<string | null> {
+  const res = await feishuFetch("/drive/v1/metas/batch_query", {
+    method: "POST",
+    body: JSON.stringify({
+      request_docs: [{ doc_token: fileToken, doc_type: "file" }],
+      with_url: true,
+    }),
+  });
+  const data = await res.json();
+  if (data.code !== 0) {
+    console.warn("[feishu] metas/batch_query 失败:", data.msg);
+    return null;
+  }
+  const metas = data.data?.metas as Array<{ url?: string }> | undefined;
+  const url = metas?.[0]?.url;
+  return typeof url === "string" && url.length > 0 ? url : null;
+}
+
+/** 兜底：租户网页域名 + /file/{token}（需与飞书客户端域名一致，如 https://mi.feishu.cn） */
+function buildDriveFileLinkFallback(fileToken: string): string | null {
+  const base = process.env.FEISHU_DRIVE_FILE_LINK_BASE?.replace(/\/$/, "");
+  if (!base) return null;
+  return `${base}/file/${fileToken}`;
+}
+
+// ─────────────────────────────────────────────
 // 云盘文件上传
 // ─────────────────────────────────────────────
 export async function uploadFileToDrive(
@@ -336,8 +365,17 @@ export async function uploadFileToDrive(
     throw new Error(`完成上传失败: ${finishData.msg}`);
 
   const fileToken = finishData.data.file_token as string;
-  const fileUrl = `https://open.feishu.cn/open-apis/drive/v1/files/${fileToken}/download`;
-  return { file_token: fileToken, url: fileUrl };
+
+  const webUrl =
+    (await getDriveFileWebUrl(fileToken)) ?? buildDriveFileLinkFallback(fileToken);
+
+  if (!webUrl) {
+    throw new Error(
+      "无法生成可在浏览器打开的文件链接：请为自建应用开通「查看、编辑和管理云空间中所有文件」或「查看云空间中文件元数据」权限；若仍失败，可在 .env.local 中配置 FEISHU_DRIVE_FILE_LINK_BASE（租户首页域名，如 https://mi.feishu.cn）作为链接兜底。"
+    );
+  }
+
+  return { file_token: fileToken, url: webUrl };
 }
 
 // ─────────────────────────────────────────────

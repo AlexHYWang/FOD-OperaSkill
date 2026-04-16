@@ -144,7 +144,7 @@ export function AppLayout({
         >
           <div className="p-4 space-y-1">
             <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">
-              PTP 小组作业
+              端到端流程 Skill 作业
             </div>
             {NAV_ITEMS.map((item) => {
               const isActive = pathname === item.href;
@@ -186,7 +186,7 @@ export function AppLayout({
             <div className="text-xs text-gray-400 text-center">
               财务部 FOD 部门
               <br />
-              AI 技能作业收集平台 v1.0
+              AI 技能作业平台 · 五大端到端流程
             </div>
           </div>
         </aside>
