@@ -118,10 +118,10 @@ export default function HomePage() {
             number="01"
             icon={<LayoutGrid size={24} />}
             title="Skill↔流程节点映射"
-            description="覆盖 PTP、OTC、RTR、PIC、税务五大端到端流程，横向看板展示各环节节点，为日常任务打上标签：纯手工 ★、跨系统 ◆、不建议AI ✕，支持批量导入。"
+            description="覆盖 PTP、OTC、RTR、PIC、税务五大端到端流程，横向看板展示各环节节点，为日常任务打上标签：纯线下 ★、跨系统 ◆、不建议AI ✕，支持批量导入。"
             href="/section1"
             color="blue"
-            items={["PTP / OTC / RTR / PIC / 税务 五大流程", "二维看板，展示任务进度（X/4步）", "支持批量粘贴导入，仅显示★纯手工切换"]}
+            items={["PTP / OTC / RTR / PIC / 税务 五大流程", "二维看板，展示任务进度（X/4步）", "支持批量粘贴导入，仅显示★纯线下切换"]}
             isLoggedIn={isLoggedIn}
           />
           <FeatureCard

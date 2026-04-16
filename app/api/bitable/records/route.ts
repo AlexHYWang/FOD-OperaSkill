@@ -1,6 +1,6 @@
 /**
  * Bitable 记录 CRUD
- * GET  /api/bitable/records?table=1&team=互联网PTP团队
+ * GET  /api/bitable/records?table=1&team=北京-互联网组
  * POST /api/bitable/records  { table: 1|2, fields: {...} }
  */
 import { NextRequest, NextResponse } from "next/server";

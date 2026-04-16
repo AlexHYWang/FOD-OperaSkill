@@ -21,7 +21,12 @@ import {
 } from "@/components/FileUploader";
 import { DownloadCard } from "@/components/DownloadCard";
 import { cn } from "@/lib/utils";
-import { STEP2_MIN_ACCURACY, E2E_PROCESSES, TASK_LABELS } from "@/lib/constants";
+import {
+  STEP2_MIN_ACCURACY,
+  E2E_PROCESSES,
+  TASK_LABELS,
+  feishuLabelIsPureManual,
+} from "@/lib/constants";
 
 interface TaskItem {
   taskName: string;
@@ -102,11 +107,6 @@ function buildProcessLookupMap(): Record<string, string> {
 
 const PROCESS_LOOKUP = buildProcessLookupMap();
 
-/** 任务二只看板展示：仅 ★ 纯手工（与任务一标签文案一致） */
-function isPureManualTask(label: string): boolean {
-  return label.includes("纯手工");
-}
-
 export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
   const searchParams = useSearchParams();
   const preselectedTask = searchParams?.get("task") ?? null;
@@ -151,10 +151,10 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
         }
         setTasks(items);
 
-        // 自动预选 URL query task（仅纯手工任务可进入任务二）
+        // 自动预选 URL query task（仅 ★ 纯线下任务可进入任务二）
         if (preselectedTask) {
           const found = items.find((t) => t.taskName === preselectedTask);
-          if (found && isPureManualTask(found.label)) {
+          if (found && feishuLabelIsPureManual(found.label)) {
             setSelectedTask(found);
             setActiveProcessId(found.processId);
           } else {
@@ -190,19 +190,19 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
     loadData();
   }, [loadData]);
 
-  const manualTasks = tasks.filter((t) => isPureManualTask(t.label));
+  const manualTasks = tasks.filter((t) => feishuLabelIsPureManual(t.label));
 
-  // 任务二仅展示纯手工：若当前选中任务不符合则清除
+  // 任务二仅展示纯线下：若当前选中任务不符合则清除
   useEffect(() => {
     setSelectedTask((prev) => {
       if (!prev) return null;
       const t = tasks.find((x) => x.taskName === prev.taskName);
-      if (!t || !isPureManualTask(t.label)) return null;
+      if (!t || !feishuLabelIsPureManual(t.label)) return null;
       return t;
     });
   }, [tasks]);
 
-  // 有纯手工任务的 processId 集合
+  // 有纯线下任务的 processId 集合
   const activeProcessIds = new Set(manualTasks.map((t) => t.processId).filter(Boolean));
   const visibleProcesses = E2E_PROCESSES.filter((p) => activeProcessIds.has(p.id));
 
@@ -239,7 +239,7 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
   if (manualTasks.length === 0) {
     return (
       <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-4">
-        该团队暂无标记为「★ 纯手工」的日常任务。任务二仅展示纯手工任务，请先在任务一中为需要实战的任务打上纯手工标签。
+        该团队暂无标记为「★ 纯线下」的日常任务。任务二仅展示纯线下任务，请先在任务一中为需要实战的任务打上纯线下标签。
       </div>
     );
   }
@@ -386,7 +386,7 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
                                   selectedTask?.taskName === task.taskName;
                                 const progress = progressMap[task.taskName] ?? 0;
                                 const labelOpt = TASK_LABELS.find((l) => task.label.includes(l.label));
-                                const isPureManual = task.label.includes("纯手工");
+                                const isPureManual = feishuLabelIsPureManual(task.label);
                                 return (
                                   <button
                                     key={task.taskName}

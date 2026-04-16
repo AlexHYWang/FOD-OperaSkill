@@ -80,7 +80,7 @@ export async function POST() {
         type: FIELD_TYPE.SINGLE_SELECT,
         property: {
           options: [
-            { name: "★ 纯手工" },
+            { name: "★ 纯线下" },
             { name: "◆ 跨系统" },
             { name: "✕ 不建议AI" },
           ],

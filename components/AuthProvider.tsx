@@ -7,6 +7,19 @@ import {
   useEffect,
   ReactNode,
 } from "react";
+/** 已从多维表/下拉中移除的旧团队名，本地缓存命中则清空（不影响「新增团队」自定义名称） */
+const STALE_SAVED_TEAMS = new Set(["互联网PTP团队"]);
+
+function readValidTeamFromStorage(): string {
+  if (typeof window === "undefined") return "";
+  const raw = localStorage.getItem("fod_selected_team") || "";
+  if (!raw) return "";
+  if (STALE_SAVED_TEAMS.has(raw)) {
+    localStorage.removeItem("fod_selected_team");
+    return "";
+  }
+  return raw;
+}
 
 interface UserInfo {
   open_id: string;
@@ -38,12 +51,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [team, setTeamState] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("fod_selected_team") || "";
-    }
-    return "";
-  });
+  // 不在 useState 初始化里读 localStorage，避免 SSR 与客户端水合不一致
+  const [team, setTeamState] = useState<string>("");
+
+  useEffect(() => {
+    const v = readValidTeamFromStorage();
+    if (v) setTeamState(v);
+  }, []);
 
   useEffect(() => {
     fetch("/api/auth/me")

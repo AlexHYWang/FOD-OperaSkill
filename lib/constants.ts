@@ -355,6 +355,21 @@ export { PTP_SECTIONS };
 
 export type TaskLabel = "pure_manual" | "cross_system" | "not_recommended";
 
+/** 飞书「标签」是否为纯线下（兼容历史「纯手工」文案） */
+export function feishuLabelIsPureManual(labelRaw: string | undefined): boolean {
+  if (!labelRaw) return false;
+  return labelRaw.includes("纯线下") || labelRaw.includes("纯手工");
+}
+
+/** 从飞书「标签」单元格解析为内部 TaskLabel */
+export function parseTaskLabelFromFeishu(labelRaw: string | undefined): TaskLabel | "" {
+  if (!labelRaw) return "";
+  if (feishuLabelIsPureManual(labelRaw)) return "pure_manual";
+  if (labelRaw.includes("跨系统")) return "cross_system";
+  if (labelRaw.includes("不建议")) return "not_recommended";
+  return "";
+}
+
 export interface LabelOption {
   value: TaskLabel;
   icon: string;
@@ -369,8 +384,8 @@ export const TASK_LABELS: LabelOption[] = [
   {
     value: "pure_manual",
     icon: "★",
-    label: "纯手工",
-    description: "纯线下操作or纯手工工作（本次优先完成）",
+    label: "纯线下",
+    description: "纯线下操作（本次优先在任务二中完成）",
     color: "text-orange-700",
     bgColor: "bg-orange-50",
     borderColor: "border-orange-300",

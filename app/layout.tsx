@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 
+/** 减轻 CDN/边缘对 HTML 的强缓存，避免首屏仍出现旧文案或旧脚本引用 */
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "FOD OperaSkill - AI技能作业收集平台",
   description:

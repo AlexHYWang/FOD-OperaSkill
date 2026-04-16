@@ -81,7 +81,7 @@ export default function Section1Page() {
                 )}
               >
                 <Filter size={12} />
-                {onlyManual ? "★ 仅纯手工（已开启）" : "★ 仅显示纯手工"}
+                {onlyManual ? "★ 仅纯线下（已开启）" : "★ 仅显示纯线下"}
               </button>
             </div>
           </div>

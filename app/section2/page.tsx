@@ -58,7 +58,7 @@ export default function Section2Page() {
               <div className="font-semibold mb-1">操作说明</div>
               <ol className="list-decimal ml-4 space-y-1 text-xs">
                 <li>先下载「母Skill框架」和「Skill Creator」工具</li>
-                <li>在下方二维看板中，仅展示「★ 纯手工」日常任务；点击任务卡片开始 Skill 实战</li>
+                <li>在下方二维看板中，仅展示「★ 纯线下」日常任务；点击任务卡片开始 Skill 实战</li>
                 <li>按顺序完成四步上传，每步完成后才能解锁下一步</li>
                 <li>第二步准确率须达到 100% 才可提交</li>
                 <li>第三、四步的对比分析报告须上传 .md 格式文件</li>

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ChevronDown, Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { PRESET_TEAMS } from "@/lib/constants";
 
 interface TeamSelectorProps {
   value: string;
@@ -22,7 +23,7 @@ export function TeamSelector({ value, onChange, disabled }: TeamSelectorProps) {
     fetch("/api/bitable/teams")
       .then((r) => r.json())
       .then((d) => setTeams(d.teams || []))
-      .catch(() => setTeams(["互联网PTP团队"]))
+      .catch(() => setTeams([...PRESET_TEAMS]))
       .finally(() => setLoading(false));
   }, []);
 

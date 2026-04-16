@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   TASK_LABELS,
+  parseTaskLabelFromFeishu,
   type TaskLabel,
   type E2EProcess,
   type ProcessSection,
@@ -140,10 +141,7 @@ export function NodeMappingGrid({
           if (!nodeId) continue;
           if (!e2eField && sectionName && sectionNameToId[sectionName] === undefined) continue;
 
-          let label: TaskLabel | "" = "";
-          if (labelRaw?.includes("纯手工")) label = "pure_manual";
-          else if (labelRaw?.includes("跨系统")) label = "cross_system";
-          else if (labelRaw?.includes("不建议")) label = "not_recommended";
+          const label = parseTaskLabelFromFeishu(labelRaw);
 
           if (!map[nodeId]) map[nodeId] = [];
           map[nodeId].push({
@@ -432,7 +430,7 @@ export function NodeMappingGrid({
       <div className="overflow-x-auto">
         <div className="flex min-w-max">
           {process.sections.map((section, sIdx) => {
-            // onlyHasTasks：有已保存任务；若同时 onlyManual，则只认「已保存且纯手工」
+            // onlyHasTasks：有已保存任务；若同时 onlyManual，则只认「已保存且纯线下」
             if (onlyHasTasks) {
               const hasAny = section.nodes.some((n) => {
                 const saved = (nodeTasksMap[n.id] || []).filter((t) => t.saved);
@@ -681,7 +679,7 @@ function SectionGroup({
     red: "from-red-600 to-red-500",
   };
 
-  // onlyHasTasks：有已保存任务；若同时 onlyManual，则只认「已保存且纯手工」
+  // onlyHasTasks：有已保存任务；若同时 onlyManual，则只认「已保存且纯线下」
   const visibleNodes = onlyHasTasks
     ? section.nodes.filter((n) => {
         const saved = (nodeTasksMap[n.id] || []).filter((t) => t.saved);
@@ -815,7 +813,7 @@ function NodeColumn({
           </div>
         )}
         {onlyManual && visibleTasks.length === 0 && (
-          <div className="text-center py-4 text-xs text-gray-400">暂无纯手工任务</div>
+          <div className="text-center py-4 text-xs text-gray-400">暂无纯线下任务</div>
         )}
         {visibleTasks.map((task) => (
           <TaskCard
@@ -906,7 +904,7 @@ function TaskCard({
             </span>
           )}
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-1">
           {labelOpt && (
             <span
               className={cn(
@@ -917,16 +915,23 @@ function TaskCard({
               {labelOpt.icon} {labelOpt.label}
             </span>
           )}
-          {isPureManual && task.saved && (
-            <button
-              onClick={onNavigate}
-              title="在任务二中完成此 Skill"
-              className="flex items-center gap-0.5 text-orange-600 hover:text-orange-800 transition-colors"
-            >
-              <ArrowRight size={11} />
-            </button>
-          )}
         </div>
+        {isPureManual && task.saved && (
+          <button
+            type="button"
+            onClick={onNavigate}
+            title="打开任务二，继续该日常任务的 Skill 实战"
+            className={cn(
+              "mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg py-2 px-2",
+              "text-xs font-semibold text-white shadow-sm border border-orange-700",
+              "bg-orange-600 hover:bg-orange-700 active:bg-orange-800",
+              "transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-1"
+            )}
+          >
+            <span>任务二 · Skill 实战</span>
+            <ArrowRight size={16} strokeWidth={2.5} className="flex-shrink-0" aria-hidden />
+          </button>
+        )}
       </div>
     );
   }
