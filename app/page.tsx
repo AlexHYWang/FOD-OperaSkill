@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,6 +11,9 @@ import {
   LogIn,
   BookOpen,
   TrendingUp,
+  BarChart3,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
@@ -18,14 +21,23 @@ import { useAuth } from "@/components/AuthProvider";
 export default function HomePage() {
   const { user, isLoggedIn, loading } = useAuth();
   const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    // 检查 URL 错误参数
     const params = new URLSearchParams(window.location.search);
     if (params.get("error")) {
       console.error("登录失败:", params.get("error"));
     }
   }, []);
+
+  // 登录后检测管理员身份
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    fetch("/api/dashboard/admin-check")
+      .then((r) => r.json())
+      .then((d) => setIsAdmin(d.isAdmin ?? false))
+      .catch(() => setIsAdmin(false));
+  }, [isLoggedIn]);
 
   if (loading) {
     return (
@@ -48,9 +60,24 @@ export default function HomePage() {
           </div>
           {isLoggedIn ? (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-600">你好，{user?.name}</span>
-              <Button onClick={() => router.push("/section1")} size="sm">
-                进入作业平台 <ArrowRight size={14} className="ml-1" />
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">你好，{user?.name}</span>
+                {isAdmin && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    <ShieldCheck size={11} />
+                    管理员
+                  </span>
+                )}
+              </div>
+              <Button
+                onClick={() => router.push("/dashboard")}
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 gap-1"
+              >
+                <BarChart3 size={14} /> 进度看板
+              </Button>
+              <Button onClick={() => router.push("/section1")} size="sm" variant="outline">
+                作业平台 <ArrowRight size={14} className="ml-1" />
               </Button>
             </div>
           ) : (
@@ -80,24 +107,49 @@ export default function HomePage() {
         </p>
 
         {isLoggedIn ? (
-          <div className="flex gap-3 justify-center">
-            <Button
-              size="lg"
-              onClick={() => router.push("/section1")}
-              className="gap-2"
-            >
-              <LayoutGrid size={18} />
-              任务一：节点映射
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => router.push("/section2")}
-              className="gap-2"
-            >
-              <Zap size={18} />
-              任务二：Skill 实战
-            </Button>
+          <div className="space-y-4">
+            {/* 管理员身份提示 */}
+            {isAdmin ? (
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium">
+                <ShieldCheck size={16} />
+                你好，管理员！可查看所有团队汇总数据、下钻分析及合并潜力
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm">
+                <Users size={16} />
+                进度看板可查看本团队任务进度、产出物及登记卡点
+              </div>
+            )}
+
+            {/* 操作按钮 */}
+            <div className="flex gap-3 justify-center flex-wrap">
+              {/* 看板入口 — 最醒目 */}
+              <Button
+                size="lg"
+                onClick={() => router.push("/dashboard")}
+                className={`gap-2 ${isAdmin ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 shadow-md" : "bg-emerald-600 hover:bg-emerald-700"}`}
+              >
+                <BarChart3 size={18} />
+                {isAdmin ? "管理员看板" : "AI进展看板"}
+              </Button>
+              <Button
+                size="lg"
+                onClick={() => router.push("/section1")}
+                className="gap-2"
+              >
+                <LayoutGrid size={18} />
+                任务一：节点映射
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => router.push("/section2")}
+                className="gap-2"
+              >
+                <Zap size={18} />
+                任务二：Skill 实战
+              </Button>
+            </div>
           </div>
         ) : (
           <Button
@@ -113,6 +165,64 @@ export default function HomePage() {
 
       {/* 功能卡片 */}
       <section className="max-w-5xl mx-auto px-4 pb-16">
+        {/* 看板入口卡片 — 横通栏 */}
+        <div className="mb-6 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3 flex-1">
+            <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600 shrink-0">
+              <BarChart3 size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="font-bold text-gray-900">AI 进展汇总看板</h3>
+                {isLoggedIn && isAdmin && (
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldCheck size={10} /> 管理员专属功能已解锁
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                {isLoggedIn && isAdmin
+                  ? "查看全部团队任务进度、流程节点下钻分析（含合并潜力高亮）、产出物对比、准确率热力图、卡点优先级排序"
+                  : "查看本团队任务进度、产出物提交情况、测试准确率，并可登记今日卡点与明日目标"}
+              </p>
+              {/* 管理员 vs 普通用户权限对比 */}
+              {isLoggedIn && (
+                <div className="flex flex-wrap gap-3 mt-2">
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    {isAdmin ? "全团队汇总统计" : "本团队任务统计"}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    {isAdmin ? "流程节点下钻 + 合并潜力分析" : "产出物 & 准确率记录"}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    {isAdmin ? "卡点跨团队汇总与优先级排序" : "登记卡点 & 明日目标"}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {isLoggedIn ? (
+            <Link
+              href="/dashboard"
+              className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              <BarChart3 size={15} />
+              {isAdmin ? "进入管理员看板" : "进入看板"}
+              <ArrowRight size={14} />
+            </Link>
+          ) : (
+            <button
+              onClick={() => (window.location.href = "/api/auth/feishu")}
+              className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-emerald-700 bg-emerald-100 border border-emerald-200 hover:bg-emerald-50 transition-colors"
+            >
+              <LogIn size={14} /> 登录后查看
+            </button>
+          )}
+        </div>
+
         <div className="grid md:grid-cols-2 gap-6 mb-10">
           <FeatureCard
             number="01"

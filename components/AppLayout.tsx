@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Menu,
   X,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TeamSelector } from "@/components/TeamSelector";
@@ -29,6 +30,14 @@ interface AppLayoutProps {
 }
 
 const NAV_ITEMS = [
+  {
+    href: "/dashboard",
+    icon: <BarChart3 size={18} />,
+    label: "AI进展看板",
+    sublabel: "各团队任务进展汇总",
+    color: "text-emerald-600",
+    bg: "bg-emerald-50",
+  },
   {
     href: "/section1",
     icon: <LayoutGrid size={18} />,
