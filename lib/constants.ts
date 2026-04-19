@@ -79,6 +79,7 @@ const PTP_SECTIONS: ProcessSection[] = [
       { id: "ptp_deposit_refund", name: "保证金退款" },
       { id: "ptp_doc_archive", name: "资料归档" },
       { id: "ptp_doc_provide", name: "资料提供（审计、税务等）" },
+      { id: "ptp_other_misc", name: "其他" },
     ],
   },
 ];
@@ -145,6 +146,7 @@ const OTC_SECTIONS: ProcessSection[] = [
       { id: "otc_deposit_receive", name: "保证金收款" },
       { id: "otc_deposit_refund", name: "保证金退款" },
       { id: "otc_data_provide", name: "资料提供" },
+      { id: "otc_other_misc", name: "其他" },
     ],
   },
 ];
@@ -228,6 +230,7 @@ const RTR_SECTIONS: ProcessSection[] = [
       { id: "rtr_data_provide", name: "数据/资料提供" },
       { id: "rtr_fixed_asset", name: "固资盘点" },
       { id: "rtr_tax_accounting", name: "税金核算" },
+      { id: "rtr_other_misc", name: "其他" },
     ],
   },
 ];
@@ -277,6 +280,11 @@ const PIC_SECTIONS: ProcessSection[] = [
       { id: "pic_outbound", name: "出库结账" },
     ],
   },
+  {
+    id: "pic_other",
+    name: "其他",
+    nodes: [{ id: "pic_other_misc", name: "其他" }],
+  },
 ];
 
 // ─── 税务 ───
@@ -307,6 +315,7 @@ const TAX_SECTIONS: ProcessSection[] = [
       { id: "tax_credit_review", name: "信用评级复评申请" },
       { id: "tax_personal_fee", name: "个税手续费返还申请" },
       { id: "tax_master_data", name: "主数据维护" },
+      { id: "tax_other_misc", name: "其他" },
     ],
   },
 ];

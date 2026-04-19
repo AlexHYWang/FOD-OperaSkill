@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LayoutGrid, Info, Filter } from "lucide-react";
+import {
+  LayoutGrid,
+  Info,
+  SlidersHorizontal,
+  X as XIcon,
+  Sparkles,
+} from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { NodeMappingGrid } from "@/components/NodeMappingGrid";
 import { useAuth } from "@/components/AuthProvider";
@@ -17,18 +23,54 @@ const PROCESS_COLORS: Record<string, { tab: string; active: string }> = {
   tax: { tab: "hover:text-red-600 hover:border-red-400", active: "text-red-700 border-red-600 bg-red-50" },
 };
 
+const FILTER_HINT_KEY = "fod-filter-hint-section1-seen";
+
 export default function Section1Page() {
-  const { user, isLoggedIn, loading, team, setTeam } = useAuth();
+  const { user, isLoggedIn, loading, team, setTeam, canEdit, profile } = useAuth();
   const router = useRouter();
   const [activeProcess, setActiveProcess] = useState(E2E_PROCESSES[0].id);
-  const [onlyManual, setOnlyManual] = useState(false);
+  const [onlyManual, setOnlyManual] = useState(true);
   const [onlyHasTasks, setOnlyHasTasks] = useState(false);
+  const [stats, setStats] = useState({
+    totalTasks: 0,
+    totalNodes: 0,
+    visibleTasks: 0,
+    visibleNodes: 0,
+  });
+
+  const [showHint, setShowHint] = useState(false);
+  const filterBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!loading && !isLoggedIn) {
-      router.push("/");
-    }
+    if (!loading && !isLoggedIn) router.push("/");
   }, [loading, isLoggedIn, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isLoggedIn) return;
+    const seen = localStorage.getItem(FILTER_HINT_KEY);
+    if (!seen) {
+      setShowHint(true);
+      const timer = setTimeout(() => {
+        setShowHint(false);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoggedIn]);
+
+  const dismissHint = useCallback(() => {
+    setShowHint(false);
+    try {
+      localStorage.setItem(FILTER_HINT_KEY, "1");
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleStatsChange = useCallback(
+    (s: typeof stats) => setStats(s),
+    []
+  );
 
   if (loading || !isLoggedIn || !user) {
     return (
@@ -39,6 +81,7 @@ export default function Section1Page() {
   }
 
   const currentProcess = E2E_PROCESSES.find((p) => p.id === activeProcess)!;
+  const filtersActive = onlyManual || onlyHasTasks;
 
   return (
     <AppLayout team={team} onTeamChange={setTeam} user={user}>
@@ -51,42 +94,19 @@ export default function Section1Page() {
                 <LayoutGrid size={18} />
                 <span className="text-sm font-medium">任务一</span>
               </div>
-              <h1 className="text-xl font-bold text-gray-900">Skill↔流程节点映射</h1>
+              <h1 className="text-xl font-bold text-gray-900">任务一 · 录入日常任务</h1>
               <p className="text-gray-500 text-xs mt-0.5">
-                选择端到端流程，为各流程节点下的日常任务打标签，并在任务二中生成对应 Skill。
+                挑一个端到端流程 → 在对应节点下点「+ 添加任务」→ 给任务选一个标签 → 保存
               </p>
-            </div>
-
-            {/* 筛选按钮组 */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setOnlyHasTasks((v) => !v)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
-                  onlyHasTasks
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600"
-                )}
-              >
-                <Filter size={12} />
-                {onlyHasTasks ? "仅有任务（已开启）" : "仅显示有任务"}
-              </button>
-              <button
-                onClick={() => setOnlyManual((v) => !v)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
-                  onlyManual
-                    ? "bg-orange-500 text-white border-orange-500"
-                    : "bg-white text-gray-600 border-gray-300 hover:border-orange-400 hover:text-orange-600"
-                )}
-              >
-                <Filter size={12} />
-                {onlyManual ? "★ 仅纯线下（已开启）" : "★ 仅显示纯线下"}
-              </button>
+              {!canEdit && team && profile.team && (
+                <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-xs text-amber-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  正在查看 <b>{team}</b> 团队数据（只读）· 你的归属团队是 <b>{profile.team}</b>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* 须知 */}
           {!team && (
             <div className="flex items-start gap-2 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
               <Info size={14} className="flex-shrink-0 mt-0.5" />
@@ -96,6 +116,127 @@ export default function Section1Page() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* 筛选状态条（独立一行） */}
+        <div className="bg-white border-b px-6 py-2 relative">
+          <div
+            ref={filterBarRef}
+            className={cn(
+              "relative rounded-xl border bg-blue-50/70 border-blue-200 px-4 py-2.5 flex items-center flex-wrap gap-3",
+              showHint && "ring-2 ring-blue-400 animate-pulse"
+            )}
+          >
+            <div className="flex items-center gap-1.5 text-xs text-blue-700 font-semibold shrink-0">
+              <SlidersHorizontal size={14} />
+              当前视图
+            </div>
+
+            <button
+              onClick={() => {
+                setOnlyManual((v) => !v);
+                dismissHint();
+              }}
+              className={cn(
+                "group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                onlyManual
+                  ? "bg-orange-500 text-white border-orange-500 shadow-sm"
+                  : "bg-white text-gray-700 border-gray-300 hover:border-orange-400 hover:text-orange-600"
+              )}
+              title="任务二重点改造的是★纯线下任务"
+            >
+              <span>★ 仅纯线下</span>
+              {onlyManual && (
+                <span
+                  className="opacity-80 hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOnlyManual(false);
+                    dismissHint();
+                  }}
+                >
+                  <XIcon size={10} />
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                setOnlyHasTasks((v) => !v);
+                dismissHint();
+              }}
+              className={cn(
+                "group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                onlyHasTasks
+                  ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                  : "bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:text-blue-600"
+              )}
+            >
+              <span>仅有任务</span>
+              {onlyHasTasks && (
+                <span
+                  className="opacity-80 hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOnlyHasTasks(false);
+                    dismissHint();
+                  }}
+                >
+                  <XIcon size={10} />
+                </span>
+              )}
+            </button>
+
+            {filtersActive && (
+              <button
+                onClick={() => {
+                  setOnlyManual(false);
+                  setOnlyHasTasks(false);
+                  dismissHint();
+                }}
+                className="text-xs text-gray-500 hover:text-red-500 ml-1 flex items-center gap-1"
+                title="清除全部筛选"
+              >
+                <XIcon size={12} /> 清除筛选
+              </button>
+            )}
+
+            <div className="flex-1" />
+
+            <div className="text-xs text-gray-600 shrink-0 flex items-center gap-1.5 flex-wrap">
+              <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2 py-0.5">
+                <b className="text-gray-900">{stats.visibleTasks}</b>
+                <span className="text-gray-500">条任务</span>
+              </span>
+              <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2 py-0.5">
+                <b className="text-gray-900">{stats.visibleNodes}</b>
+                <span className="text-gray-500">个节点</span>
+              </span>
+              {filtersActive && stats.totalTasks > 0 && (
+                <span className="text-gray-400">
+                  （总 {stats.totalTasks} 条 / {stats.totalNodes} 节点）
+                </span>
+              )}
+            </div>
+
+            {showHint && (
+              <div className="absolute -top-3 right-3 translate-y-[-100%] bg-blue-600 text-white rounded-lg px-3 py-2 text-xs shadow-lg flex items-start gap-2 max-w-xs">
+                <Sparkles size={12} className="mt-0.5 shrink-0" />
+                <div className="leading-relaxed">
+                  信息太多？用上方筛选器缩小范围；
+                  <br />
+                  看完点右边「✕ 清除筛选」恢复
+                </div>
+                <button
+                  onClick={dismissHint}
+                  className="shrink-0 text-white/70 hover:text-white"
+                  title="我知道了"
+                >
+                  <XIcon size={12} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 横向流程页签 */}
@@ -136,6 +277,8 @@ export default function Section1Page() {
               process={currentProcess}
               onlyManual={onlyManual}
               onlyHasTasks={onlyHasTasks}
+              readOnly={!canEdit}
+              onStatsChange={handleStatsChange}
             />
           ) : (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400">

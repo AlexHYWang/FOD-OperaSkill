@@ -7,19 +7,36 @@ import {
   LayoutGrid,
   Zap,
   ArrowRight,
-  ChevronRight,
   LogIn,
-  BookOpen,
-  TrendingUp,
+  LogOut,
   BarChart3,
   ShieldCheck,
+  Sparkles,
+  TrendingUp,
+  Clock,
   Users,
+  AlertTriangle,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
 
+interface InProgressItem {
+  taskName: string;
+  lastStep: number;
+  submittedAt: number;
+}
+
+interface HomeSummary {
+  loggedIn: boolean;
+  recent7dMine: { section1Count: number; section2StepCount: number };
+  inProgress: InProgressItem[];
+  teamThisWeek: { stepCount: number; unresolvedBlockers: number; team: string };
+}
+
 export default function HomePage() {
-  const { user, isLoggedIn, loading } = useAuth();
+  const { user, isLoggedIn, loading, profile } = useAuth();
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -30,7 +47,6 @@ export default function HomePage() {
     }
   }, []);
 
-  // 登录后检测管理员身份
   useEffect(() => {
     if (!isLoggedIn) return;
     fetch("/api/dashboard/admin-check")
@@ -39,9 +55,14 @@ export default function HomePage() {
       .catch(() => setIsAdmin(false));
   }, [isLoggedIn]);
 
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/";
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-100">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
       </div>
     );
@@ -49,9 +70,8 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      {/* 顶部导航 */}
       <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-gray-900">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
               <Zap size={14} className="text-white" />
@@ -60,8 +80,13 @@ export default function HomePage() {
           </div>
           {isLoggedIn ? (
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">你好，{user?.name}</span>
+              <div className="hidden sm:flex items-center gap-2">
+                <span className="text-sm text-gray-600">{user?.name}</span>
+                {profile.team && (
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    {profile.team}
+                  </span>
+                )}
                 {isAdmin && (
                   <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                     <ShieldCheck size={11} />
@@ -69,16 +94,12 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-              <Button
-                onClick={() => router.push("/dashboard")}
-                size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700 gap-1"
+              <button
+                onClick={handleLogout}
+                className="text-xs text-gray-500 hover:text-red-600 px-2 py-1.5 rounded hover:bg-red-50 flex items-center gap-1"
               >
-                <BarChart3 size={14} /> 进度看板
-              </Button>
-              <Button onClick={() => router.push("/section1")} size="sm" variant="outline">
-                作业平台 <ArrowRight size={14} className="ml-1" />
-              </Button>
+                <LogOut size={12} /> 退出
+              </button>
             </div>
           ) : (
             <Button
@@ -92,271 +113,368 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="max-w-5xl mx-auto px-4 py-16 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium mb-6">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-          财务部 FOD 部门 · PTP / OTC / RTR / PIC / 税务 · AI 技能作业
+      <section className="max-w-6xl mx-auto px-6 pt-16 pb-10 text-center">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium mb-6">
+          <Sparkles size={12} />
+          财务部 FOD · AI 技能作业门户
         </div>
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          FOD OperaSkill
-          <span className="text-blue-600"> 作业收集平台</span>
+        <h1 className="text-5xl sm:text-6xl font-black text-gray-900 mb-5 tracking-tight leading-tight">
+          让 AI 接手{" "}
+          <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            重复的财务工作
+          </span>
         </h1>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
-          覆盖 PTP、OTC、RTR、PIC、税务五大端到端流程，为各团队日常任务打标签、生成并验证 AI Skill。
+        <p className="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
+          覆盖 PTP / OTC / RTR / PIC / 税务 五大端到端流程，
+          <br className="hidden sm:block" />
+          帮各团队把日常任务沉淀成可复用的 AI Skill。
         </p>
 
-        {isLoggedIn ? (
-          <div className="space-y-4">
-            {/* 管理员身份提示 */}
-            {isAdmin ? (
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium">
-                <ShieldCheck size={16} />
-                你好，管理员！可查看所有团队汇总数据、下钻分析及合并潜力
-              </div>
-            ) : (
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm">
-                <Users size={16} />
-                进度看板可查看本团队任务进度、产出物及登记卡点
-              </div>
-            )}
-
-            {/* 操作按钮 */}
-            <div className="flex gap-3 justify-center flex-wrap">
-              {/* 看板入口 — 最醒目 */}
-              <Button
-                size="lg"
-                onClick={() => router.push("/dashboard")}
-                className={`gap-2 ${isAdmin ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 shadow-md" : "bg-emerald-600 hover:bg-emerald-700"}`}
-              >
-                <BarChart3 size={18} />
-                {isAdmin ? "管理员看板" : "AI进展看板"}
-              </Button>
-              <Button
-                size="lg"
-                onClick={() => router.push("/section1")}
-                className="gap-2"
-              >
-                <LayoutGrid size={18} />
-                任务一：节点映射
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => router.push("/section2")}
-                className="gap-2"
-              >
-                <Zap size={18} />
-                任务二：Skill 实战
-              </Button>
-            </div>
+        {!isLoggedIn && (
+          <div className="mt-8">
+            <Button
+              size="lg"
+              onClick={() => (window.location.href = "/api/auth/feishu")}
+              className="bg-[#0F6FEB] hover:bg-[#0d5ec7] gap-2 text-base px-8 shadow-lg shadow-blue-200"
+            >
+              <LogIn size={18} />
+              用飞书账号登录开始
+            </Button>
           </div>
-        ) : (
-          <Button
-            size="lg"
-            onClick={() => (window.location.href = "/api/auth/feishu")}
-            className="bg-[#0F6FEB] hover:bg-[#0d5ec7] gap-2 text-base px-8"
-          >
-            <LogIn size={18} />
-            用飞书账号登录，开始提交
-          </Button>
         )}
       </section>
 
-      {/* 功能卡片 */}
-      <section className="max-w-5xl mx-auto px-4 pb-16">
-        {/* 看板入口卡片 — 横通栏 */}
-        <div className="mb-6 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600 shrink-0">
-              <BarChart3 size={24} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-bold text-gray-900">AI 进展汇总看板</h3>
-                {isLoggedIn && isAdmin && (
-                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <ShieldCheck size={10} /> 管理员专属功能已解锁
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-gray-500 leading-relaxed">
-                {isLoggedIn && isAdmin
-                  ? "查看全部团队任务进度、流程节点下钻分析（含合并潜力高亮）、产出物对比、准确率热力图、卡点优先级排序"
-                  : "查看本团队任务进度、产出物提交情况、测试准确率，并可登记今日卡点与明日目标"}
-              </p>
-              {/* 管理员 vs 普通用户权限对比 */}
-              {isLoggedIn && (
-                <div className="flex flex-wrap gap-3 mt-2">
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-700">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    {isAdmin ? "全团队汇总统计" : "本团队任务统计"}
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-700">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    {isAdmin ? "流程节点下钻 + 合并潜力分析" : "产出物 & 准确率记录"}
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-700">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    {isAdmin ? "卡点跨团队汇总与优先级排序" : "登记卡点 & 明日目标"}
-                  </div>
-                </div>
-              )}
-            </div>
+      <section className="max-w-6xl mx-auto px-6 mb-10">
+        <div className="bg-white rounded-2xl border shadow-sm p-6">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-5">
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold">
+                !
+              </span>
+              第一次用？按这 3 步走
+            </h2>
           </div>
-          {isLoggedIn ? (
-            <Link
-              href="/dashboard"
-              className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm"
-            >
-              <BarChart3 size={15} />
-              {isAdmin ? "进入管理员看板" : "进入看板"}
-              <ArrowRight size={14} />
-            </Link>
-          ) : (
-            <button
-              onClick={() => (window.location.href = "/api/auth/feishu")}
-              className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-emerald-700 bg-emerald-100 border border-emerald-200 hover:bg-emerald-50 transition-colors"
-            >
-              <LogIn size={14} /> 登录后查看
-            </button>
-          )}
-        </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-10">
-          <FeatureCard
-            number="01"
-            icon={<LayoutGrid size={24} />}
-            title="Skill↔流程节点映射"
-            description="覆盖 PTP、OTC、RTR、PIC、税务五大端到端流程，横向看板展示各环节节点，为日常任务打上标签：纯线下 ★、跨系统 ◆、不建议AI ✕，支持批量导入。"
-            href="/section1"
-            color="blue"
-            items={["PTP / OTC / RTR / PIC / 税务 五大流程", "二维看板，展示任务进度（X/4步）", "支持批量粘贴导入，仅显示★纯线下切换"]}
-            isLoggedIn={isLoggedIn}
-          />
-          <FeatureCard
-            number="02"
-            icon={<Zap size={24} />}
-            title="各团队日常任务 Skill 实战"
-            description="四步顺序工作流，从生成子Skill1到调优子Skill3，每步上传对应文件和准确率。第二步准确率须达到100%，方可继续。"
-            href="/section2"
-            color="purple"
-            items={["第一步：知识库（多文件）+ 子Skill1 + 初步验证", "第二步：子Skill2（准确率须达到100%）", "第三步：上传对比分析报告（.md）", "第四步：优化知识库 → 子Skill3"]}
-            isLoggedIn={isLoggedIn}
-          />
-        </div>
-
-        {/* 流程说明 */}
-        <div className="bg-white rounded-2xl border p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <BookOpen size={20} className="text-blue-600" />
-            作业提交流程
-          </h2>
-          <div className="flex flex-col md:flex-row gap-3">
+          <div className="grid md:grid-cols-3 gap-3">
             {[
-              { step: "1", text: "飞书登录", sub: "获取身份认证" },
-              { step: "2", text: "选择团队", sub: "加载历史数据" },
-              { step: "3", text: "完成任务一", sub: "节点映射打标" },
-              { step: "4", text: "完成任务二", sub: "四步Skill实战（准确率100%）" },
-              { step: "5", text: "数据同步", sub: "自动写入飞书多维表格" },
-            ].map((item, i, arr) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="flex flex-col items-center">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">
-                    {item.step}
+              {
+                step: "1",
+                title: "任务一 · 录日常任务",
+                desc: "把你团队的日常任务写上去，给每条打一个标签",
+                href: "/section1",
+                icon: <LayoutGrid size={18} />,
+                tone: "blue",
+              },
+              {
+                step: "2",
+                title: "任务二 · 做 Skill 实战",
+                desc: "点 ★纯线下 的任务，按 4 步完成 Skill 打磨",
+                href: "/section2",
+                icon: <Zap size={18} />,
+                tone: "purple",
+              },
+              {
+                step: "3",
+                title: "看板 · 看大家的进展",
+                desc: "看其他团队做到哪一步了，自己的卡点顺手登记",
+                href: "/dashboard",
+                icon: <BarChart3 size={18} />,
+                tone: "emerald",
+              },
+            ].map((s) => {
+              const toneMap: Record<string, string> = {
+                blue: "bg-blue-50 text-blue-700 border-blue-200",
+                purple: "bg-purple-50 text-purple-700 border-purple-200",
+                emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+              };
+              return (
+                <Link
+                  href={isLoggedIn ? s.href : "#"}
+                  key={s.step}
+                  onClick={(e) => {
+                    if (!isLoggedIn) {
+                      e.preventDefault();
+                      window.location.href = "/api/auth/feishu";
+                    }
+                  }}
+                  className={`group block rounded-xl border p-4 transition-all hover:shadow-md hover:-translate-y-0.5 ${toneMap[s.tone]}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-white/80 flex items-center justify-center shadow-sm">
+                        {s.icon}
+                      </div>
+                      <div className="text-xs font-bold opacity-70">
+                        STEP {s.step}
+                      </div>
+                    </div>
+                    <ArrowRight
+                      size={16}
+                      className="opacity-50 group-hover:opacity-100 transition-opacity"
+                    />
                   </div>
-                  <div className="text-sm font-medium text-gray-800 mt-1 text-center">
-                    {item.text}
+                  <div className="font-bold text-sm mb-1">{s.title}</div>
+                  <div className="text-xs opacity-75 leading-relaxed">
+                    {s.desc}
                   </div>
-                  <div className="text-xs text-gray-400 text-center">{item.sub}</div>
-                </div>
-                {i < arr.length - 1 && (
-                  <ChevronRight
-                    size={16}
-                    className="text-gray-300 flex-shrink-0 hidden md:block"
-                  />
-                )}
-              </div>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>
+
+      {isLoggedIn && profile.isBootstrapped && (
+        <section className="max-w-6xl mx-auto px-6 pb-16">
+          <MyActivityPanel
+            team={profile.team}
+            router={router}
+          />
+        </section>
+      )}
+
+      <footer className="max-w-6xl mx-auto px-6 pb-10 text-center text-xs text-gray-400">
+        财务部 FOD · AI 技能作业平台 · 五大端到端流程
+      </footer>
     </div>
   );
 }
 
-function FeatureCard({
-  number,
-  icon,
-  title,
-  description,
-  href,
-  color,
-  items,
-  isLoggedIn,
+function MyActivityPanel({
+  team,
+  router,
 }: {
-  number: string;
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  href: string;
-  color: "blue" | "purple";
-  items: string[];
-  isLoggedIn: boolean;
+  team: string;
+  router: ReturnType<typeof useRouter>;
 }) {
-  const colorMap = {
-    blue: {
-      bg: "bg-blue-600",
-      light: "bg-blue-50",
-      text: "text-blue-600",
-      border: "border-blue-200",
-      hover: "hover:border-blue-300",
-    },
-    purple: {
-      bg: "bg-purple-600",
-      light: "bg-purple-50",
-      text: "text-purple-600",
-      border: "border-purple-200",
-      hover: "hover:border-purple-300",
-    },
-  };
-  const c = colorMap[color];
+  const [summary, setSummary] = useState<HomeSummary | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    setLoadingSummary(true);
+    fetch("/api/home/summary", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setSummary(d as HomeSummary);
+        } else {
+          setSummary(null);
+        }
+      })
+      .catch(() => setSummary(null))
+      .finally(() => setLoadingSummary(false));
+  }, [refreshKey]);
+
+  const reload = () => setRefreshKey((v) => v + 1);
 
   return (
-    <div
-      className={`bg-white rounded-2xl border ${c.border} ${c.hover} p-6 hover:shadow-md transition-all`}
-    >
-      <div className="flex items-start justify-between mb-4">
-        <div className={`p-2.5 rounded-xl ${c.light} ${c.text}`}>{icon}</div>
-        <span className={`text-3xl font-black ${c.text} opacity-20`}>
-          {number}
-        </span>
-      </div>
-      <h3 className="font-bold text-lg text-gray-900 mb-2">{title}</h3>
-      <p className="text-sm text-gray-500 mb-4 leading-relaxed">{description}</p>
-      <ul className="space-y-1.5 mb-5">
-        {items.map((item, i) => (
-          <li key={i} className="flex items-center gap-2 text-xs text-gray-600">
-            <div className={`w-1.5 h-1.5 rounded-full ${c.bg} flex-shrink-0`} />
-            {item}
-          </li>
-        ))}
-      </ul>
-      {isLoggedIn ? (
-        <Link
-          href={href}
-          className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-medium text-white ${c.bg} hover:opacity-90 transition-opacity`}
-        >
-          进入 {title.split("：")[0]} <ArrowRight size={14} />
-        </Link>
-      ) : (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={16} className="text-blue-600" />
+          <h3 className="text-base font-bold text-gray-900">我的动态</h3>
+          <span className="text-xs text-gray-400">
+            · 团队 <b className="text-gray-600">{team || "未选"}</b>
+          </span>
+        </div>
         <button
-          onClick={() => (window.location.href = "/api/auth/feishu")}
-          className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-medium ${c.text} ${c.light} border ${c.border} hover:opacity-80 transition-opacity`}
+          onClick={reload}
+          disabled={loadingSummary}
+          className="text-xs text-gray-500 hover:text-blue-600 inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-50"
         >
-          <TrendingUp size={14} /> 登录后查看
+          <RefreshCw size={12} className={loadingSummary ? "animate-spin" : ""} />
+          刷新
         </button>
-      )}
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4">
+        <CardRecent loading={loadingSummary} summary={summary} />
+        <CardInProgress loading={loadingSummary} summary={summary} router={router} />
+        <CardTeamWeek loading={loadingSummary} summary={summary} />
+      </div>
     </div>
+  );
+}
+
+function CardShell({
+  title,
+  icon,
+  accent,
+  children,
+  onClick,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  accent: string;
+  children: React.ReactNode;
+  onClick?: () => void;
+}) {
+  const interactive = !!onClick;
+  return (
+    <div
+      onClick={onClick}
+      className={`rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-all ${
+        interactive ? "cursor-pointer hover:-translate-y-0.5" : ""
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`w-8 h-8 rounded-lg ${accent} flex items-center justify-center text-white`}>
+          {icon}
+        </div>
+        <div className="text-sm font-semibold text-gray-700">{title}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function CardRecent({
+  loading,
+  summary,
+}: {
+  loading: boolean;
+  summary: HomeSummary | null;
+}) {
+  const s = summary?.recent7dMine;
+  return (
+    <CardShell
+      title="最近 7 天我的贡献"
+      icon={<Clock size={16} />}
+      accent="bg-gradient-to-br from-blue-500 to-indigo-500"
+    >
+      {loading ? (
+        <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
+          <Loader2 size={14} className="animate-spin" /> 统计中…
+        </div>
+      ) : !s ? (
+        <div className="text-sm text-gray-400">暂无数据</div>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-black text-blue-600">
+              {s.section1Count}
+            </span>
+            <span className="text-xs text-gray-500">条 · 任务一录入</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-purple-600">
+              {s.section2StepCount}
+            </span>
+            <span className="text-xs text-gray-500">步 · 任务二提交</span>
+          </div>
+          {s.section1Count === 0 && s.section2StepCount === 0 && (
+            <div className="mt-2 text-xs text-gray-400 leading-relaxed">
+              这周还没动手。从上方「STEP 1」开始吧。
+            </div>
+          )}
+        </div>
+      )}
+    </CardShell>
+  );
+}
+
+function CardInProgress({
+  loading,
+  summary,
+  router,
+}: {
+  loading: boolean;
+  summary: HomeSummary | null;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const items = summary?.inProgress ?? [];
+  return (
+    <CardShell
+      title="我的进行中"
+      icon={<Zap size={16} />}
+      accent="bg-gradient-to-br from-purple-500 to-pink-500"
+    >
+      {loading ? (
+        <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
+          <Loader2 size={14} className="animate-spin" /> 查询中…
+        </div>
+      ) : items.length === 0 ? (
+        <div className="text-xs text-gray-400 leading-relaxed py-2">
+          还没进入任务二的第一步
+          <br />
+          <button
+            onClick={() => router.push("/section2")}
+            className="mt-2 inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium"
+          >
+            去任务二选一个任务 <ArrowRight size={12} />
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((it) => (
+            <button
+              key={it.taskName}
+              onClick={() =>
+                router.push(`/section2?task=${encodeURIComponent(it.taskName)}`)
+              }
+              className="w-full text-left rounded-lg border border-purple-100 bg-purple-50/50 hover:bg-purple-50 hover:border-purple-200 px-3 py-2 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 text-xs font-medium text-purple-900 truncate">
+                  {it.taskName}
+                </div>
+                <span className="text-[11px] bg-white text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap">
+                  第 {it.lastStep} / 4 步
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </CardShell>
+  );
+}
+
+function CardTeamWeek({
+  loading,
+  summary,
+}: {
+  loading: boolean;
+  summary: HomeSummary | null;
+}) {
+  const s = summary?.teamThisWeek;
+  return (
+    <CardShell
+      title="本团队 · 本周"
+      icon={<Users size={16} />}
+      accent="bg-gradient-to-br from-emerald-500 to-teal-500"
+    >
+      {loading ? (
+        <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
+          <Loader2 size={14} className="animate-spin" /> 统计中…
+        </div>
+      ) : !s ? (
+        <div className="text-sm text-gray-400">暂无数据</div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-black text-emerald-600">
+              {s.stepCount}
+            </span>
+            <span className="text-xs text-gray-500">步 · 本周累计提交</span>
+          </div>
+          <div
+            className={`flex items-center gap-1.5 text-xs rounded-lg px-2 py-1.5 ${
+              s.unresolvedBlockers > 0
+                ? "bg-amber-50 text-amber-800 border border-amber-200"
+                : "bg-gray-50 text-gray-500 border border-gray-200"
+            }`}
+          >
+            <AlertTriangle
+              size={12}
+              className={s.unresolvedBlockers > 0 ? "text-amber-600" : "text-gray-400"}
+            />
+            未解决卡点：
+            <b className="font-semibold">{s.unresolvedBlockers}</b> 个
+          </div>
+        </div>
+      )}
+    </CardShell>
   );
 }

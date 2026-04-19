@@ -33,19 +33,58 @@ export async function getTenantAccessToken(): Promise<string> {
   return cachedToken;
 }
 
+/** 判断飞书返回的错误是否疑似 token 失效，这类错误可以通过刷新 token 重试一次 */
+function isLikelyTokenError(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const b = body as { code?: unknown; msg?: unknown };
+  if (typeof b.code !== "number" || b.code === 0) return false;
+  // 99991663 Illegal access_token / 99991664 Access token 已过期 /
+  // 99991668 Invalid tenant access token / 99991672 Authorization failed
+  if ([99991663, 99991664, 99991668, 99991672].includes(b.code)) return true;
+  const msg = typeof b.msg === "string" ? b.msg : "";
+  return /invalid access token|access[_ ]?token|token.*expire/i.test(msg);
+}
+
 async function feishuFetch(
   path: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const token = await getTenantAccessToken();
-  return fetch(`${FEISHU_BASE}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-  });
+  const doFetch = async () => {
+    const t = await getTenantAccessToken();
+    return fetch(`${FEISHU_BASE}${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${t}`,
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+    });
+  };
+
+  let res = await doFetch();
+
+  // 非 JSON / 二进制响应直接透传
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) return res;
+
+  let peek: unknown = null;
+  try {
+    peek = await res.clone().json();
+  } catch {
+    return res;
+  }
+
+  if (isLikelyTokenError(peek)) {
+    const b = peek as { code?: number; msg?: string };
+    console.warn(
+      `[feishu] token 疑似失效，自动刷新并重试一次: code=${b.code} msg=${b.msg} path=${path}`
+    );
+    cachedToken = null;
+    tokenExpiry = 0;
+    res = await doFetch();
+  }
+
+  return res;
 }
 
 // ─────────────────────────────────────────────
@@ -169,6 +208,55 @@ export async function createField(
   return data;
 }
 
+export interface BitableField {
+  field_id: string;
+  field_name: string;
+  type: number;
+  property?: Record<string, unknown>;
+}
+
+export async function listFields(
+  appToken: string,
+  tableId: string
+): Promise<BitableField[]> {
+  const all: BitableField[] = [];
+  let pageToken: string | undefined;
+  do {
+    const query = new URLSearchParams();
+    query.set("page_size", "100");
+    if (pageToken) query.set("page_token", pageToken);
+    const res = await feishuFetch(
+      `/bitable/v1/apps/${appToken}/tables/${tableId}/fields?${query}`
+    );
+    const data = await res.json();
+    if (data.code !== 0) throw new Error(`查询字段失败: ${data.msg}`);
+    all.push(...(data.data.items || []));
+    pageToken = data.data.has_more ? data.data.page_token : undefined;
+  } while (pageToken);
+  return all;
+}
+
+/**
+ * 幂等创建字段：若字段名已存在则跳过
+ * 返回 true 表示新建成功，false 表示已存在跳过
+ */
+export async function ensureField(
+  appToken: string,
+  tableId: string,
+  field: {
+    field_name: string;
+    type: number;
+    property?: Record<string, unknown>;
+  }
+): Promise<boolean> {
+  const fields = await listFields(appToken, tableId);
+  if (fields.some((f) => f.field_name === field.field_name)) {
+    return false;
+  }
+  await createField(appToken, tableId, field);
+  return true;
+}
+
 // ─────────────────────────────────────────────
 // Bitable 记录 CRUD
 // ─────────────────────────────────────────────
@@ -255,6 +343,92 @@ export async function updateRecord(
   const data = await res.json();
   if (data.code !== 0) throw new Error(`更新记录失败: ${data.msg}`);
   return data.data.record;
+}
+
+export async function batchUpdateRecords(
+  appToken: string,
+  tableId: string,
+  records: Array<{ record_id: string; fields: Record<string, unknown> }>
+) {
+  if (records.length === 0) return [];
+  const res = await feishuFetch(
+    `/bitable/v1/apps/${appToken}/tables/${tableId}/records/batch_update`,
+    {
+      method: "POST",
+      body: JSON.stringify({ records }),
+    }
+  );
+  const data = await res.json();
+  if (data.code !== 0) throw new Error(`批量更新记录失败: ${data.msg}`);
+  return data.data.records as BitableRecord[];
+}
+
+export async function deleteRecord(
+  appToken: string,
+  tableId: string,
+  recordId: string
+) {
+  const res = await feishuFetch(
+    `/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`,
+    { method: "DELETE" }
+  );
+  const data = await res.json();
+  if (data.code !== 0) throw new Error(`删除记录失败: ${data.msg}`);
+  return true;
+}
+
+// ─────────────────────────────────────────────
+// 通讯录：获取用户部门信息
+// https://open.feishu.cn/document/server-docs/contact-v3/user/get
+// 需要权限：contact:user.base:readonly 或 contact:user.department:readonly
+// ─────────────────────────────────────────────
+export async function getUserDepartment(
+  openId: string
+): Promise<{ department: string; departmentIds: string[] } | null> {
+  try {
+    const res = await feishuFetch(
+      `/contact/v3/users/${openId}?user_id_type=open_id&department_id_type=open_department_id`
+    );
+    const data = await res.json();
+    if (data.code !== 0) {
+      // 99991672 = 应用未开通「获取通讯录信息」权限；此场景是已知降级路径，不再 warn，改为 info
+      if (data.code === 99991672) {
+        console.info(
+          "[feishu] 跳过部门回填：应用未开通通讯录权限 (contact:user.base:readonly)。归属团队仍会正常写入，仅 部门 字段留空。"
+        );
+      } else {
+        console.warn(
+          `[feishu] 获取用户详情失败 code=${data.code} msg=${data.msg}`
+        );
+      }
+      return null;
+    }
+    const user = data.data?.user;
+    if (!user) return null;
+    const departmentIds: string[] = Array.isArray(user.department_ids)
+      ? user.department_ids
+      : [];
+
+    if (departmentIds.length === 0) {
+      return { department: "", departmentIds: [] };
+    }
+
+    const depRes = await feishuFetch(
+      `/contact/v3/departments/${departmentIds[0]}?department_id_type=open_department_id`
+    );
+    const depData = await depRes.json();
+    if (depData.code !== 0) {
+      console.warn(
+        `[feishu] 获取部门名称失败 code=${depData.code} msg=${depData.msg}`
+      );
+      return { department: "", departmentIds };
+    }
+    const name: string = depData.data?.department?.name || "";
+    return { department: name, departmentIds };
+  } catch (err) {
+    console.warn("[feishu] getUserDepartment 异常:", err);
+    return null;
+  }
 }
 
 // ─────────────────────────────────────────────

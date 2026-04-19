@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
-  Trash2,
   Save,
   CheckCircle2,
   AlertCircle,
@@ -12,6 +11,10 @@ import {
   ArrowRight,
   X,
   AlertTriangle,
+  Tag,
+  Lock,
+  Trash2,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,7 +33,7 @@ interface TaskRow {
   label: TaskLabel | "";
   saved: boolean;
   recordId?: string;
-  submittedAt?: number; // 飞书 提交时间（毫秒）
+  submittedAt?: number;
 }
 
 interface NodeMappingGridProps {
@@ -39,12 +42,17 @@ interface NodeMappingGridProps {
   process: E2EProcess;
   onlyManual: boolean;
   onlyHasTasks: boolean;
+  readOnly?: boolean;
+  onStatsChange?: (stats: {
+    totalTasks: number;
+    totalNodes: number;
+    visibleTasks: number;
+    visibleNodes: number;
+  }) => void;
 }
 
-// 进度数据：任务名 → 已完成步骤数 (0-4)
 type ProgressMap = Record<string, number>;
 
-// 重复警告弹窗的数据结构
 interface DupAlert {
   nodeId: string;
   nodeName: string;
@@ -53,6 +61,40 @@ interface DupAlert {
   newOnes: TaskRow[];
   bulkLabel?: TaskLabel | "";
   isBatch: boolean;
+}
+
+interface AddTaskState {
+  nodeId: string;
+  nodeName: string;
+  sectionName: string;
+  taskName: string;
+  label: TaskLabel | "";
+  saving: boolean;
+}
+
+interface BatchState {
+  nodeId: string;
+  sectionName: string;
+  nodeName: string;
+  text: string;
+  step: "input" | "label";
+  tempTasks: string[];
+  bulkLabel: TaskLabel | "";
+}
+
+interface DeleteTarget {
+  recordId: string;
+  taskName: string;
+  hasSubmission: boolean;
+}
+
+interface DeleteConfirm {
+  targets: DeleteTarget[];
+  stage: 1 | 2; // 1=初次确认 2=二次"真的删除？"
+  blocked: boolean; // 若 true 则对普通用户禁用，仅展示阻断信息
+  blockedCount: number; // 被阻断的任务数（普通用户视角）
+  deleting: boolean;
+  error?: string;
 }
 
 function generateId() {
@@ -76,32 +118,50 @@ export function NodeMappingGrid({
   process,
   onlyManual,
   onlyHasTasks,
+  readOnly = false,
+  onStatsChange,
 }: NodeMappingGridProps) {
-  // nodeId → TaskRow[]
   const [nodeTasksMap, setNodeTasksMap] = useState<Record<string, TaskRow[]>>({});
   const [progressMap, setProgressMap] = useState<ProgressMap>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saveStatus, setSaveStatus] = useState<Record<string, "success" | "error" | null>>({});
   const [loading, setLoading] = useState(false);
 
-  // 批量导入状态
-  const [batchState, setBatchState] = useState<{
-    nodeId: string;
-    sectionName: string;
-    nodeName: string;
-    text: string;
-    step: "input" | "label";
-    tempTasks: string[];
-    bulkLabel: TaskLabel | "";
-  } | null>(null);
-
-  // 重复任务警告弹窗
+  const [addState, setAddState] = useState<AddTaskState | null>(null);
+  const [batchState, setBatchState] = useState<BatchState | null>(null);
   const [dupAlert, setDupAlert] = useState<DupAlert | null>(null);
+
+  // 多选 recordId 集合；仅在 !readOnly 时启用
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [applyingBulk, setApplyingBulk] = useState(false);
+  const [postSaveHint, setPostSaveHint] = useState<{ nodeId: string; count: number } | null>(null);
+
+  // 哪些任务名已经在 Table2 里有任何一条提交（用来决定是否允许普通用户删除）
+  const [tasksWithSubmissions, setTasksWithSubmissions] = useState<Set<string>>(
+    new Set()
+  );
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirm | null>(null);
 
   const router = useRouter();
   const batchTextRef = useRef<HTMLTextAreaElement>(null);
+  const addInputRef = useRef<HTMLInputElement>(null);
 
-  // 加载团队数据（表1 + 表2进度）
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/dashboard/admin-check")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setIsAdmin(!!d.isAdmin);
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const loadData = useCallback(async () => {
     if (!team) return;
     setLoading(true);
@@ -111,7 +171,6 @@ export function NodeMappingGrid({
         fetch(`/api/bitable/records?table=2&team=${encodeURIComponent(team)}`).then((r) => r.json()),
       ]);
 
-      // 构建节点名称 → nodeId 映射（当前流程）
       const nodeNameToId: Record<string, string> = {};
       const sectionNameToId: Record<string, string> = {};
       for (const sec of process.sections) {
@@ -121,7 +180,6 @@ export function NodeMappingGrid({
         }
       }
 
-      // 表1：填入任务
       const map: Record<string, TaskRow[]> = {};
       if (r1.success) {
         for (const record of r1.records) {
@@ -132,7 +190,6 @@ export function NodeMappingGrid({
           const submittedAt = record.fields["提交时间"] as number | undefined;
           const e2eField = record.fields["端到端流程"] as string | undefined;
 
-          // 如果记录有「端到端流程」字段，精确匹配当前流程；否则回落到节点名匹配
           if (e2eField && e2eField !== process.shortName && e2eField !== process.name && e2eField !== process.id) {
             continue;
           }
@@ -156,15 +213,17 @@ export function NodeMappingGrid({
       }
       setNodeTasksMap(map);
 
-      // 表2：计算每个任务的进度
       const prog: ProgressMap = {};
+      const submittedNames = new Set<string>();
       if (r2.success) {
         const stepsPerTask: Record<string, Set<number>> = {};
         for (const record of r2.records) {
           const taskName = record.fields["关联任务"] as string;
           const step = record.fields["步骤编号"] as number;
           const status = record.fields["步骤状态"] as string;
-          if (!taskName || status !== "已完成") continue;
+          if (!taskName) continue;
+          submittedNames.add(String(taskName).trim());
+          if (status !== "已完成") continue;
           if (!stepsPerTask[taskName]) stepsPerTask[taskName] = new Set();
           stepsPerTask[taskName].add(step);
         }
@@ -173,6 +232,7 @@ export function NodeMappingGrid({
         }
       }
       setProgressMap(prog);
+      setTasksWithSubmissions(submittedNames);
     } catch (err) {
       console.error("加载失败:", err);
     } finally {
@@ -184,113 +244,115 @@ export function NodeMappingGrid({
     loadData();
   }, [loadData]);
 
-  // 添加空任务行
-  const addTask = (nodeId: string) => {
-    setNodeTasksMap((prev) => ({
-      ...prev,
-      [nodeId]: [
-        ...(prev[nodeId] || []),
-        { id: generateId(), taskName: "", label: "", saved: false },
-      ],
-    }));
-  };
+  // 当切换团队或流程时清空多选
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [team, process.id]);
 
-  const updateTask = (nodeId: string, taskId: string, updates: Partial<TaskRow>) => {
-    setNodeTasksMap((prev) => ({
-      ...prev,
-      [nodeId]: (prev[nodeId] || []).map((t) =>
-        t.id === taskId ? { ...t, ...updates, saved: false } : t
-      ),
-    }));
-  };
-
-  const removeTask = (nodeId: string, taskId: string) => {
-    setNodeTasksMap((prev) => ({
-      ...prev,
-      [nodeId]: (prev[nodeId] || []).filter((t) => t.id !== taskId),
-    }));
-  };
-
-  // 实际写入飞书（重复检测后调用）
-  const doSaveTasks = async (
-    nodeId: string,
-    nodeName: string,
-    sectionName: string,
-    tasksToSave: TaskRow[],
-    labelOverride?: TaskLabel | ""
-  ) => {
-    setSaving((prev) => ({ ...prev, [nodeId]: true }));
-    setSaveStatus((prev) => ({ ...prev, [nodeId]: null }));
-    try {
-      for (const task of tasksToSave) {
-        const effectiveLabel = labelOverride !== undefined ? labelOverride : task.label;
-        const labelOpt = TASK_LABELS.find((l) => l.value === effectiveLabel);
-        const labelText = labelOpt ? `${labelOpt.icon} ${labelOpt.label}` : "";
-        await fetch("/api/bitable/records", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            table: "1",
-            fields: {
-              团队名称: team,
-              端到端流程: process.shortName,
-              流程环节: sectionName,
-              流程节点: nodeName,
-              任务名称: task.taskName.trim(),
-              标签: labelText,
-            },
-          }),
-        });
+  // 统计：总 / 可见（受 onlyManual / onlyHasTasks 影响）
+  useEffect(() => {
+    if (!onStatsChange) return;
+    let totalTasks = 0;
+    let totalNodes = 0;
+    let visibleTasks = 0;
+    let visibleNodes = 0;
+    for (const section of process.sections) {
+      for (const node of section.nodes) {
+        const raw = nodeTasksMap[node.id] || [];
+        const saved = raw.filter((t) => t.saved);
+        totalTasks += saved.length;
+        totalNodes += 1;
+        const visible = onlyManual ? saved.filter((t) => t.label === "pure_manual") : saved;
+        if (onlyHasTasks && visible.length === 0) continue;
+        visibleTasks += visible.length;
+        visibleNodes += 1;
       }
-      setNodeTasksMap((prev) => ({
-        ...prev,
-        [nodeId]: (prev[nodeId] || []).map((t) => {
-          const isSaved = tasksToSave.find((u) => u.id === t.id);
-          if (isSaved) {
-            return { ...t, saved: true, label: labelOverride !== undefined ? (labelOverride as TaskLabel) : t.label };
-          }
-          return t;
-        }),
-      }));
-      setSaveStatus((prev) => ({ ...prev, [nodeId]: "success" }));
-      setTimeout(() => setSaveStatus((prev) => ({ ...prev, [nodeId]: null })), 3000);
-    } catch {
-      setSaveStatus((prev) => ({ ...prev, [nodeId]: "error" }));
-    } finally {
-      setSaving((prev) => ({ ...prev, [nodeId]: false }));
     }
+    onStatsChange({ totalTasks, totalNodes, visibleTasks, visibleNodes });
+  }, [nodeTasksMap, process, onlyManual, onlyHasTasks, onStatsChange]);
+
+  // ─── 单条添加：通过弹窗保存 ────────────────────────────────
+  const openAddModal = (nodeId: string, nodeName: string, sectionName: string) => {
+    if (readOnly) return;
+    setAddState({
+      nodeId,
+      nodeName,
+      sectionName,
+      taskName: "",
+      label: "",
+      saving: false,
+    });
+    setTimeout(() => addInputRef.current?.focus(), 50);
   };
 
-  // 保存某个节点的未保存任务（含重复检测）
-  const saveNodeTasks = async (
-    nodeId: string,
-    nodeName: string,
-    sectionName: string
-  ) => {
-    const tasks = nodeTasksMap[nodeId] || [];
-    const unsaved = tasks.filter((t) => !t.saved && t.taskName.trim() && t.label);
-    if (unsaved.length === 0) return;
+  const handleAddSave = async () => {
+    if (!addState) return;
+    const name = addState.taskName.trim();
+    if (!name || !addState.label) return;
 
-    const savedNames = new Set(
-      tasks.filter((t) => t.saved).map((t) => t.taskName.trim())
-    );
-    const duplicates = unsaved
-      .filter((t) => savedNames.has(t.taskName.trim()))
-      .map((t) => ({
-        taskName: t.taskName.trim(),
-        submittedAt: tasks.find((s) => s.saved && s.taskName.trim() === t.taskName.trim())?.submittedAt,
-      }));
-    const newOnes = unsaved.filter((t) => !savedNames.has(t.taskName.trim()));
-
-    if (duplicates.length > 0) {
-      setDupAlert({ nodeId, nodeName, sectionName, duplicates, newOnes, isBatch: false });
+    // 重复检测
+    const existing = nodeTasksMap[addState.nodeId] || [];
+    const dup = existing.find((t) => t.saved && t.taskName.trim() === name);
+    if (dup) {
+      setDupAlert({
+        nodeId: addState.nodeId,
+        nodeName: addState.nodeName,
+        sectionName: addState.sectionName,
+        duplicates: [{ taskName: dup.taskName, submittedAt: dup.submittedAt }],
+        newOnes: [],
+        isBatch: false,
+      });
+      setAddState(null);
       return;
     }
 
-    await doSaveTasks(nodeId, nodeName, sectionName, newOnes);
+    setAddState((prev) => prev && { ...prev, saving: true });
+    const labelOpt = TASK_LABELS.find((l) => l.value === addState.label);
+    const labelText = labelOpt ? `${labelOpt.icon} ${labelOpt.label}` : "";
+
+    try {
+      const r = await fetch("/api/bitable/records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          table: "1",
+          fields: {
+            团队名称: team,
+            端到端流程: process.shortName,
+            流程环节: addState.sectionName,
+            流程节点: addState.nodeName,
+            任务名称: name,
+            标签: labelText,
+          },
+        }),
+      });
+      const d = await r.json();
+      const recordId = d.record?.record_id || d.record?.id;
+      setNodeTasksMap((prev) => ({
+        ...prev,
+        [addState.nodeId]: [
+          ...(prev[addState.nodeId] || []),
+          {
+            id: generateId(),
+            taskName: name,
+            label: addState.label as TaskLabel,
+            saved: true,
+            recordId,
+            submittedAt: Date.now(),
+          },
+        ],
+      }));
+      const nodeId = addState.nodeId;
+      setAddState(null);
+      setPostSaveHint({ nodeId, count: 1 });
+      setTimeout(() => setPostSaveHint(null), 5000);
+    } catch (err) {
+      console.error(err);
+      setAddState((prev) => prev && { ...prev, saving: false });
+    }
   };
 
-  // 批量导入确认（第一步：解析文本）
+  // ─── 批量导入 ─────────────────────────────────────────────
   const confirmBatchText = () => {
     if (!batchState) return;
     const lines = batchState.text
@@ -301,11 +363,9 @@ export function NodeMappingGrid({
     setBatchState((prev) => prev && { ...prev, step: "label", tempTasks: lines, bulkLabel: "" });
   };
 
-  // 批量导入保存（第二步：打标签后保存，含重复检测）
   const saveBatchImport = async () => {
     if (!batchState || batchState.step !== "label" || !batchState.bulkLabel) return;
     const { nodeId, sectionName, nodeName, tempTasks, bulkLabel } = batchState;
-
     const existingTasks = nodeTasksMap[nodeId] || [];
     const savedNames = new Set(existingTasks.filter((t) => t.saved).map((t) => t.taskName.trim()));
 
@@ -338,7 +398,6 @@ export function NodeMappingGrid({
     await commitBatchRows(nodeId, nodeName, sectionName, newOnes, bulkLabel);
   };
 
-  // 实际写入批量导入的行
   const commitBatchRows = async (
     nodeId: string,
     nodeName: string,
@@ -353,7 +412,7 @@ export function NodeMappingGrid({
     try {
       const newRows: TaskRow[] = [];
       for (const row of rows) {
-        await fetch("/api/bitable/records", {
+        const r = await fetch("/api/bitable/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -368,14 +427,24 @@ export function NodeMappingGrid({
             },
           }),
         });
-        newRows.push({ ...row, label: bulkLabel as TaskLabel, saved: true });
+        const d = await r.json();
+        const recordId = d.record?.record_id || d.record?.id;
+        newRows.push({
+          ...row,
+          label: bulkLabel as TaskLabel,
+          saved: true,
+          recordId,
+          submittedAt: Date.now(),
+        });
       }
       setNodeTasksMap((prev) => ({
         ...prev,
         [nodeId]: [...(prev[nodeId] || []), ...newRows],
       }));
       setSaveStatus((prev) => ({ ...prev, [nodeId]: "success" }));
+      setPostSaveHint({ nodeId, count: newRows.length });
       setTimeout(() => setSaveStatus((prev) => ({ ...prev, [nodeId]: null })), 3000);
+      setTimeout(() => setPostSaveHint(null), 5000);
     } catch {
       setSaveStatus((prev) => ({ ...prev, [nodeId]: "error" }));
     } finally {
@@ -383,7 +452,6 @@ export function NodeMappingGrid({
     }
   };
 
-  // 重复弹窗：继续保存新任务（跳过重复）
   const handleDupContinue = async () => {
     if (!dupAlert) return;
     const { nodeId, nodeName, sectionName, newOnes, bulkLabel, isBatch } = dupAlert;
@@ -391,8 +459,170 @@ export function NodeMappingGrid({
     if (newOnes.length === 0) return;
     if (isBatch && bulkLabel !== undefined) {
       await commitBatchRows(nodeId, nodeName, sectionName, newOnes, bulkLabel);
+    }
+  };
+
+  // ─── 多选 + 批量打标签 ──────────────────────────────────
+  const toggleSelect = (recordId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(recordId)) next.delete(recordId);
+      else next.add(recordId);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // 所有已保存任务（扁平化）
+  const allSavedTasks = useMemo(() => {
+    const list: { task: TaskRow; nodeId: string; nodeName: string; sectionName: string }[] = [];
+    for (const section of process.sections) {
+      for (const node of section.nodes) {
+        const tasks = nodeTasksMap[node.id] || [];
+        for (const t of tasks) {
+          if (t.saved && t.recordId) {
+            list.push({ task: t, nodeId: node.id, nodeName: node.name, sectionName: section.name });
+          }
+        }
+      }
+    }
+    return list;
+  }, [nodeTasksMap, process.sections]);
+
+  // ─── 删除（单条/批量）──────────────────────────────────
+  const requestDelete = (items: DeleteTarget[]) => {
+    if (readOnly || items.length === 0) return;
+    const blockedItems = items.filter((x) => x.hasSubmission);
+    const blocked = !isAdmin && blockedItems.length > 0;
+    setDeleteConfirm({
+      targets: items,
+      stage: 1,
+      blocked,
+      blockedCount: blockedItems.length,
+      deleting: false,
+    });
+  };
+
+  const performDelete = async () => {
+    if (!deleteConfirm || deleteConfirm.blocked) return;
+    if (deleteConfirm.stage === 1) {
+      setDeleteConfirm({ ...deleteConfirm, stage: 2 });
+      return;
+    }
+    setDeleteConfirm({ ...deleteConfirm, deleting: true, error: undefined });
+
+    const failed: string[] = [];
+    for (const t of deleteConfirm.targets) {
+      try {
+        const qs = new URLSearchParams({
+          table: "1",
+          recordId: t.recordId,
+        });
+        if (t.hasSubmission && isAdmin) qs.set("force", "1");
+        const resp = await fetch(`/api/bitable/records?${qs.toString()}`, {
+          method: "DELETE",
+        });
+        const d = await resp.json();
+        if (!resp.ok || !d.success) {
+          failed.push(`${t.taskName}：${d.error || resp.statusText}`);
+        }
+      } catch (err) {
+        failed.push(`${t.taskName}：${String(err)}`);
+      }
+    }
+
+    // 成功的从本地 state 移除
+    const okIds = new Set(
+      deleteConfirm.targets
+        .filter(
+          (t) =>
+            !failed.some((f) => f.startsWith(t.taskName + "："))
+        )
+        .map((t) => t.recordId)
+    );
+    if (okIds.size > 0) {
+      setNodeTasksMap((prev) => {
+        const next: Record<string, TaskRow[]> = {};
+        for (const [nid, arr] of Object.entries(prev)) {
+          next[nid] = arr.filter((t) => !t.recordId || !okIds.has(t.recordId));
+        }
+        return next;
+      });
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        okIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+
+    if (failed.length > 0) {
+      setDeleteConfirm({
+        ...deleteConfirm,
+        stage: 2,
+        deleting: false,
+        error: `${failed.length} 条删除失败：\n${failed.slice(0, 5).join("\n")}${failed.length > 5 ? `\n… 还有 ${failed.length - 5} 条` : ""}`,
+      });
     } else {
-      await doSaveTasks(nodeId, nodeName, sectionName, newOnes);
+      setDeleteConfirm(null);
+    }
+  };
+
+  const requestDeleteOne = (recordId: string, taskName: string) => {
+    const hasSubmission = tasksWithSubmissions.has(taskName.trim());
+    requestDelete([{ recordId, taskName, hasSubmission }]);
+  };
+
+  const requestDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    const items: DeleteTarget[] = allSavedTasks
+      .filter((x) => x.task.recordId && selectedIds.has(x.task.recordId))
+      .map((x) => ({
+        recordId: x.task.recordId!,
+        taskName: x.task.taskName,
+        hasSubmission: tasksWithSubmissions.has(x.task.taskName.trim()),
+      }));
+    if (items.length === 0) return;
+    requestDelete(items);
+  };
+
+  const applyBulkLabel = async (label: TaskLabel) => {
+    if (selectedIds.size === 0) return;
+    const labelOpt = TASK_LABELS.find((l) => l.value === label)!;
+    const labelText = `${labelOpt.icon} ${labelOpt.label}`;
+    setApplyingBulk(true);
+    try {
+      const targets = allSavedTasks.filter(
+        (x) => x.task.recordId && selectedIds.has(x.task.recordId)
+      );
+      await Promise.all(
+        targets.map((x) =>
+          fetch("/api/bitable/records", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              table: "1",
+              recordId: x.task.recordId,
+              fields: { 标签: labelText },
+            }),
+          })
+        )
+      );
+      // 更新本地状态
+      setNodeTasksMap((prev) => {
+        const next = { ...prev };
+        for (const x of targets) {
+          next[x.nodeId] = (next[x.nodeId] || []).map((t) =>
+            t.id === x.task.id ? { ...t, label } : t
+          );
+        }
+        return next;
+      });
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error("批量打标失败:", err);
+    } finally {
+      setApplyingBulk(false);
     }
   };
 
@@ -406,37 +636,23 @@ export function NodeMappingGrid({
   }
 
   return (
-    <div className="relative">
-      {/* 图例 */}
-      <div className="flex flex-wrap gap-2 px-4 pt-3 pb-2 bg-gray-50 border-b">
-        <span className="text-xs text-gray-400 self-center mr-1">图例：</span>
-        {TASK_LABELS.map((l) => (
-          <span
-            key={l.value}
-            className={cn(
-              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border",
-              l.color, l.bgColor, l.borderColor
-            )}
-          >
-            {l.icon} {l.label}
-          </span>
-        ))}
-        <span className="text-xs text-gray-400 self-center ml-2">
-          · 提交者：{userName}
-        </span>
-      </div>
+    <div className="relative pb-24">
+      {/* 顶部提示行（仅只读态时显示） */}
+      {readOnly && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+          <Lock size={12} />
+          当前团队数据仅可查看，不可新增/批量/编辑。若需修改请先在顶部切换回自己的归属团队。
+        </div>
+      )}
 
       {/* 二维看板（横向滚动） */}
       <div className="overflow-x-auto">
         <div className="flex min-w-max">
           {process.sections.map((section, sIdx) => {
-            // onlyHasTasks：有已保存任务；若同时 onlyManual，则只认「已保存且纯线下」
             if (onlyHasTasks) {
               const hasAny = section.nodes.some((n) => {
                 const saved = (nodeTasksMap[n.id] || []).filter((t) => t.saved);
-                if (onlyManual) {
-                  return saved.some((t) => t.label === "pure_manual");
-                }
+                if (onlyManual) return saved.some((t) => t.label === "pure_manual");
                 return saved.length > 0;
               });
               if (!hasAny) return null;
@@ -453,10 +669,24 @@ export function NodeMappingGrid({
                 saveStatus={saveStatus}
                 onlyManual={onlyManual}
                 onlyHasTasks={onlyHasTasks}
-                onAddTask={addTask}
-                onUpdateTask={updateTask}
-                onRemoveTask={removeTask}
-                onSaveNode={saveNodeTasks}
+                readOnly={readOnly}
+                postSaveHint={postSaveHint}
+                selectedIds={selectedIds}
+                tasksWithSubmissions={tasksWithSubmissions}
+                isAdmin={isAdmin}
+                onToggleSelect={toggleSelect}
+                onToggleSelectMany={(ids, selected) => {
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (selected) for (const id of ids) next.add(id);
+                    else for (const id of ids) next.delete(id);
+                    return next;
+                  });
+                }}
+                onRequestDeleteOne={requestDeleteOne}
+                onAddTask={(nodeId, nodeName, sectionName) =>
+                  openAddModal(nodeId, nodeName, sectionName)
+                }
                 onOpenBatch={(nodeId, sectionName, nodeName) => {
                   setBatchState({
                     nodeId,
@@ -478,6 +708,119 @@ export function NodeMappingGrid({
         </div>
       </div>
 
+      {/* 单条添加弹窗 */}
+      {addState && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-5 pb-0">
+              <div className="flex items-start justify-between mb-1">
+                <div>
+                  <div className="text-xs text-blue-600 font-semibold mb-0.5">
+                    添加一个日常任务
+                  </div>
+                  <div className="text-base font-bold text-gray-900">
+                    {addState.sectionName} / {addState.nodeName}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAddState(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Step1 任务名 */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 flex items-center gap-1 mb-1.5">
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px]">
+                    1
+                  </span>
+                  任务名称
+                </label>
+                <input
+                  ref={addInputRef}
+                  value={addState.taskName}
+                  onChange={(e) =>
+                    setAddState((prev) => prev && { ...prev, taskName: e.target.value })
+                  }
+                  placeholder="例如：供应商主数据新增"
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+
+              {/* Step2 选标签（必选） */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 flex items-center gap-1 mb-1.5">
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px]">
+                    2
+                  </span>
+                  选一个标签
+                  <span className="text-red-500">*</span>
+                  <span className="text-gray-400 font-normal ml-1">
+                    （必选，决定后续是否进入任务二）
+                  </span>
+                </label>
+                <div className="grid grid-cols-1 gap-2">
+                  {TASK_LABELS.map((opt) => {
+                    const active = addState.label === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() =>
+                          setAddState((prev) => prev && { ...prev, label: opt.value })
+                        }
+                        className={cn(
+                          "text-left flex items-start gap-2 px-3 py-2.5 rounded-lg border transition-all",
+                          active
+                            ? cn(opt.color, opt.bgColor, opt.borderColor, "ring-2 ring-offset-1")
+                            : "bg-white border-gray-200 hover:border-gray-400 text-gray-700"
+                        )}
+                      >
+                        <span className="text-base leading-none mt-0.5">{opt.icon}</span>
+                        <span className="flex-1">
+                          <span className="block text-sm font-semibold">{opt.label}</span>
+                          <span className="block text-xs opacity-75 mt-0.5">
+                            {opt.description}
+                          </span>
+                        </span>
+                        {active && <CheckCircle2 size={16} className="shrink-0 mt-0.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-1 text-[11px] text-gray-500 bg-gray-50 px-3 py-2 rounded-lg flex gap-1.5">
+                <ClipboardList size={12} className="shrink-0 mt-0.5 text-gray-400" />
+                <span>
+                  要一次录多条？关掉这个窗口，点节点下方的「批量导入」即可粘贴多行任务名。
+                </span>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t bg-gray-50 flex items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => setAddState(null)}>
+                取消
+              </Button>
+              <Button
+                onClick={handleAddSave}
+                disabled={
+                  !addState.taskName.trim() || !addState.label || addState.saving
+                }
+                className="gap-1"
+              >
+                <Save size={14} />
+                {addState.saving ? "保存中..." : "保存"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 批量导入弹层 */}
       {batchState && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -497,7 +840,7 @@ export function NodeMappingGrid({
             {batchState.step === "input" ? (
               <>
                 <div className="text-sm text-gray-600">
-                  每行输入一个任务名称，系统自动识别为多条任务：
+                  每行写一条任务名，粘完就可以下一步打标签：
                 </div>
                 <textarea
                   ref={batchTextRef}
@@ -518,14 +861,14 @@ export function NodeMappingGrid({
                     onClick={confirmBatchText}
                     disabled={!batchState.text.split("\n").filter((l) => l.trim()).length}
                   >
-                    下一步：批量打标签 →
+                    下一步：统一打标签 →
                   </Button>
                 </div>
               </>
             ) : (
               <>
                 <div className="text-sm text-gray-700">
-                  即将导入 <strong>{batchState.tempTasks.length}</strong> 条任务，请为它们选择统一标签：
+                  即将导入 <strong>{batchState.tempTasks.length}</strong> 条，先统一一个标签（稍后可多选再分开调）：
                 </div>
                 <div className="max-h-32 overflow-y-auto border rounded-lg p-2 bg-gray-50">
                   {batchState.tempTasks.map((t, i) => (
@@ -553,14 +896,19 @@ export function NodeMappingGrid({
                   ))}
                 </div>
                 <div className="flex gap-2 justify-between">
-                  <Button variant="outline" onClick={() => setBatchState((prev) => prev && { ...prev, step: "input" })}>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      setBatchState((prev) => prev && { ...prev, step: "input" })
+                    }
+                  >
                     ← 返回修改
                   </Button>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setBatchState(null)}>取消</Button>
                     <Button onClick={saveBatchImport} disabled={!batchState.bulkLabel}>
                       <Save size={14} className="mr-1" />
-                      保存 {batchState.tempTasks.length} 条任务
+                      保存 {batchState.tempTasks.length} 条
                     </Button>
                   </div>
                 </div>
@@ -570,7 +918,7 @@ export function NodeMappingGrid({
         </div>
       )}
 
-      {/* 重复任务警告弹层 */}
+      {/* 重复任务警告 */}
       {dupAlert && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
@@ -594,9 +942,7 @@ export function NodeMappingGrid({
                 {dupAlert.duplicates.map((d, i) => (
                   <div key={i} className="px-3 py-2 text-xs">
                     <span className="font-medium text-amber-900">{d.taskName}</span>
-                    <span className="text-amber-600 ml-2">
-                      （提交于 {formatTs(d.submittedAt)}）
-                    </span>
+                    <span className="text-amber-600 ml-2">（提交于 {formatTs(d.submittedAt)}）</span>
                   </div>
                 ))}
               </div>
@@ -633,6 +979,187 @@ export function NodeMappingGrid({
           </div>
         </div>
       )}
+
+      {/* 底部浮动批量工具条（多选 ≥1 时显示） */}
+      {!readOnly && selectedIds.size > 0 && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-white rounded-full shadow-2xl border px-5 py-2 flex items-center gap-3 animate-fade-in">
+          <div className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+            <Tag size={14} className="text-blue-500" />
+            已选 {selectedIds.size} 条
+          </div>
+          <div className="w-px h-4 bg-gray-200" />
+          <div className="text-xs text-gray-400">批量打：</div>
+          {TASK_LABELS.map((opt) => (
+            <button
+              key={opt.value}
+              disabled={applyingBulk}
+              onClick={() => applyBulkLabel(opt.value)}
+              className={cn(
+                "text-sm px-2.5 py-1 rounded-full border font-medium transition-all",
+                opt.color,
+                opt.bgColor,
+                opt.borderColor,
+                "hover:ring-2 hover:ring-offset-1 disabled:opacity-50"
+              )}
+            >
+              {opt.icon} {opt.label}
+            </button>
+          ))}
+          <div className="w-px h-4 bg-gray-200" />
+          <button
+            onClick={requestDeleteSelected}
+            disabled={applyingBulk}
+            className="text-sm px-2.5 py-1 rounded-full border font-semibold transition-all text-red-600 bg-red-50 border-red-200 hover:bg-red-100 hover:ring-2 hover:ring-red-300 hover:ring-offset-1 disabled:opacity-50 flex items-center gap-1"
+          >
+            <Trash2 size={13} />
+            批量删除 ({selectedIds.size})
+          </button>
+          <button
+            onClick={clearSelection}
+            className="ml-1 text-gray-400 hover:text-red-500 transition-colors"
+            title="取消选择"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* 删除确认弹窗 */}
+      {deleteConfirm && (
+        <DeleteConfirmDialog
+          confirm={deleteConfirm}
+          isAdmin={isAdmin}
+          onCancel={() => setDeleteConfirm(null)}
+          onProceed={performDelete}
+        />
+      )}
+
+      <span className="hidden">{userName}</span>
+    </div>
+  );
+}
+
+function DeleteConfirmDialog({
+  confirm,
+  isAdmin,
+  onCancel,
+  onProceed,
+}: {
+  confirm: DeleteConfirm;
+  isAdmin: boolean;
+  onCancel: () => void;
+  onProceed: () => void;
+}) {
+  const total = confirm.targets.length;
+  const submissionCount = confirm.targets.filter((t) => t.hasSubmission).length;
+  const preview = confirm.targets.slice(0, 6);
+  const more = confirm.targets.length - preview.length;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              "p-2 rounded-full",
+              confirm.blocked ? "bg-gray-100" : "bg-red-100"
+            )}
+          >
+            {confirm.blocked ? (
+              <Lock size={20} className="text-gray-600" />
+            ) : (
+              <Trash2 size={20} className="text-red-600" />
+            )}
+          </div>
+          <div>
+            <div className="font-bold text-gray-900">
+              {confirm.blocked
+                ? "无法删除 · 仅管理员可操作"
+                : total === 1
+                ? `确认删除任务「${confirm.targets[0].taskName}」？`
+                : `确认删除选中的 ${total} 条任务？`}
+            </div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              删除后不可恢复；同名任务的任务一标签会一并移除
+            </div>
+          </div>
+        </div>
+
+        <div className="max-h-40 overflow-y-auto border rounded-lg bg-gray-50 divide-y divide-gray-100">
+          {preview.map((t, i) => (
+            <div
+              key={t.recordId}
+              className={cn(
+                "px-3 py-2 text-xs flex items-center justify-between gap-2",
+                t.hasSubmission && "bg-amber-50"
+              )}
+            >
+              <span className="truncate text-gray-800 font-medium">
+                {i + 1}. {t.taskName}
+              </span>
+              {t.hasSubmission && (
+                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
+                  已有任务二提交
+                </span>
+              )}
+            </div>
+          ))}
+          {more > 0 && (
+            <div className="px-3 py-2 text-xs text-gray-500 text-center">
+              … 还有 {more} 条
+            </div>
+          )}
+        </div>
+
+        {confirm.blocked && (
+          <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 leading-relaxed">
+            其中 <b>{confirm.blockedCount}</b> 条已有任务二提交，普通用户不能删除。
+            <br />
+            请取消勾选这些条目，或联系管理员处理。
+          </div>
+        )}
+
+        {!confirm.blocked && submissionCount > 0 && isAdmin && (
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 leading-relaxed flex gap-2">
+            <ShieldCheck size={14} className="mt-0.5 shrink-0 text-amber-600" />
+            <span>
+              管理员模式：其中 <b>{submissionCount}</b> 条已有任务二提交，Table2
+              历史记录仍会保留，仅不再展示在任务一。
+            </span>
+          </div>
+        )}
+
+        {confirm.error && (
+          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 whitespace-pre-wrap leading-relaxed">
+            {confirm.error}
+          </div>
+        )}
+
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={onCancel} disabled={confirm.deleting}>
+            取消
+          </Button>
+          {!confirm.blocked && (
+            <Button
+              onClick={onProceed}
+              disabled={confirm.deleting}
+              className={cn(
+                "gap-1 text-white",
+                confirm.stage === 1
+                  ? "bg-red-500 hover:bg-red-600"
+                  : "bg-red-700 hover:bg-red-800 ring-2 ring-red-300"
+              )}
+            >
+              <Trash2 size={14} />
+              {confirm.deleting
+                ? "删除中…"
+                : confirm.stage === 1
+                ? "确认删除"
+                : "真的删除？再点一次"}
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -648,10 +1175,15 @@ function SectionGroup({
   saveStatus,
   onlyManual,
   onlyHasTasks,
+  readOnly,
+  postSaveHint,
+  selectedIds,
+  tasksWithSubmissions,
+  isAdmin,
+  onToggleSelect,
+  onToggleSelectMany,
+  onRequestDeleteOne,
   onAddTask,
-  onUpdateTask,
-  onRemoveTask,
-  onSaveNode,
   onOpenBatch,
   onNavigateToTask,
 }: {
@@ -664,10 +1196,15 @@ function SectionGroup({
   saveStatus: Record<string, "success" | "error" | null>;
   onlyManual: boolean;
   onlyHasTasks: boolean;
-  onAddTask: (nodeId: string) => void;
-  onUpdateTask: (nodeId: string, taskId: string, updates: Partial<TaskRow>) => void;
-  onRemoveTask: (nodeId: string, taskId: string) => void;
-  onSaveNode: (nodeId: string, nodeName: string, sectionName: string) => Promise<void>;
+  readOnly: boolean;
+  postSaveHint: { nodeId: string; count: number } | null;
+  selectedIds: Set<string>;
+  tasksWithSubmissions: Set<string>;
+  isAdmin: boolean;
+  onToggleSelect: (recordId: string) => void;
+  onToggleSelectMany: (recordIds: string[], selected: boolean) => void;
+  onRequestDeleteOne: (recordId: string, taskName: string) => void;
+  onAddTask: (nodeId: string, nodeName: string, sectionName: string) => void;
   onOpenBatch: (nodeId: string, sectionName: string, nodeName: string) => void;
   onNavigateToTask: (taskName: string) => void;
 }) {
@@ -679,13 +1216,10 @@ function SectionGroup({
     red: "from-red-600 to-red-500",
   };
 
-  // onlyHasTasks：有已保存任务；若同时 onlyManual，则只认「已保存且纯线下」
   const visibleNodes = onlyHasTasks
     ? section.nodes.filter((n) => {
         const saved = (nodeTasksMap[n.id] || []).filter((t) => t.saved);
-        if (onlyManual) {
-          return saved.some((t) => t.label === "pure_manual");
-        }
+        if (onlyManual) return saved.some((t) => t.label === "pure_manual");
         return saved.length > 0;
       })
     : section.nodes;
@@ -694,7 +1228,6 @@ function SectionGroup({
 
   return (
     <div className={cn("flex flex-col border-r border-gray-200", sectionIndex === 0 && "border-l")}>
-      {/* 环节标题 */}
       <div
         className={cn(
           "px-3 py-2 text-white text-sm font-semibold text-center bg-gradient-to-r",
@@ -708,7 +1241,6 @@ function SectionGroup({
         </span>
       </div>
 
-      {/* 节点列组 */}
       <div className="flex flex-1">
         {visibleNodes.map((node, nIdx) => (
           <NodeColumn
@@ -721,10 +1253,15 @@ function SectionGroup({
             isSaving={saving[node.id] || false}
             saveStatus={saveStatus[node.id] || null}
             onlyManual={onlyManual}
-            onAddTask={() => onAddTask(node.id)}
-            onUpdateTask={(taskId, updates) => onUpdateTask(node.id, taskId, updates)}
-            onRemoveTask={(taskId) => onRemoveTask(node.id, taskId)}
-            onSave={() => onSaveNode(node.id, node.name, section.name)}
+            readOnly={readOnly}
+            postSaveHint={postSaveHint && postSaveHint.nodeId === node.id ? postSaveHint : null}
+            selectedIds={selectedIds}
+            tasksWithSubmissions={tasksWithSubmissions}
+            isAdmin={isAdmin}
+            onToggleSelect={onToggleSelect}
+            onToggleSelectMany={onToggleSelectMany}
+            onRequestDeleteOne={onRequestDeleteOne}
+            onAddTask={() => onAddTask(node.id, node.name, section.name)}
             onOpenBatch={() => onOpenBatch(node.id, section.name, node.name)}
             onNavigateToTask={onNavigateToTask}
           />
@@ -741,13 +1278,17 @@ function NodeColumn({
   isLastInSection,
   tasks,
   progressMap,
-  isSaving,
   saveStatus,
   onlyManual,
+  readOnly,
+  postSaveHint,
+  selectedIds,
+  tasksWithSubmissions,
+  isAdmin,
+  onToggleSelect,
+  onToggleSelectMany,
+  onRequestDeleteOne,
   onAddTask,
-  onUpdateTask,
-  onRemoveTask,
-  onSave,
   onOpenBatch,
   onNavigateToTask,
 }: {
@@ -759,21 +1300,47 @@ function NodeColumn({
   isSaving: boolean;
   saveStatus: "success" | "error" | null;
   onlyManual: boolean;
+  readOnly: boolean;
+  postSaveHint: { nodeId: string; count: number } | null;
+  selectedIds: Set<string>;
+  tasksWithSubmissions: Set<string>;
+  isAdmin: boolean;
+  onToggleSelect: (recordId: string) => void;
+  onToggleSelectMany: (recordIds: string[], selected: boolean) => void;
+  onRequestDeleteOne: (recordId: string, taskName: string) => void;
   onAddTask: () => void;
-  onUpdateTask: (taskId: string, updates: Partial<TaskRow>) => void;
-  onRemoveTask: (taskId: string) => void;
-  onSave: () => void;
   onOpenBatch: () => void;
   onNavigateToTask: (taskName: string) => void;
 }) {
-  const visibleTasks = onlyManual
-    ? tasks.filter((t) => t.label === "pure_manual")
-    : tasks;
-
+  const visibleTasks = onlyManual ? tasks.filter((t) => t.label === "pure_manual") : tasks;
   const manualTaskCount = tasks.filter((t) => t.label === "pure_manual").length;
   const headerTaskCount = onlyManual ? manualTaskCount : tasks.length;
 
-  const hasUnsaved = tasks.some((t) => !t.saved && t.taskName.trim() && t.label);
+  // 可选任务：已保存 + 有 recordId + （普通用户再要求无提交；管理员全部可选）
+  const selectableTasks = visibleTasks.filter((t) => {
+    if (!t.saved || !t.recordId) return false;
+    if (isAdmin) return true;
+    return !tasksWithSubmissions.has(t.taskName.trim());
+  });
+  const selectableIds = selectableTasks
+    .map((t) => t.recordId!)
+    .filter(Boolean);
+  const selectedCountHere = selectableIds.filter((id) => selectedIds.has(id)).length;
+  const allSelectedHere =
+    selectableIds.length > 0 && selectedCountHere === selectableIds.length;
+  const partiallySelectedHere =
+    selectedCountHere > 0 && selectedCountHere < selectableIds.length;
+  const checkboxRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (checkboxRef.current) {
+      checkboxRef.current.indeterminate = partiallySelectedHere;
+    }
+  }, [partiallySelectedHere]);
+
+  const toggleAllHere = () => {
+    if (selectableIds.length === 0) return;
+    onToggleSelectMany(selectableIds, !allSelectedHere);
+  };
 
   return (
     <div
@@ -783,13 +1350,33 @@ function NodeColumn({
       )}
       style={{ minHeight: "320px" }}
     >
-      {/* 节点标题 */}
-      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-700 truncate">{node.name}</span>
-        <span className="text-xs text-gray-400 flex-shrink-0 ml-1">{headerTaskCount}</span>
+      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          {!readOnly && selectableIds.length > 0 && (
+            <input
+              ref={checkboxRef}
+              type="checkbox"
+              checked={allSelectedHere}
+              onChange={toggleAllHere}
+              className="shrink-0 accent-blue-600 cursor-pointer"
+              title={
+                allSelectedHere
+                  ? "取消选中当前节点全部任务"
+                  : partiallySelectedHere
+                  ? `已选 ${selectedCountHere}/${selectableIds.length}，点击选中全部可操作任务`
+                  : `选中当前节点全部可操作任务（共 ${selectableIds.length} 条）`
+              }
+            />
+          )}
+          <span className="text-xs font-semibold text-gray-700 truncate">
+            {node.name}
+          </span>
+        </div>
+        <span className="text-xs text-gray-400 flex-shrink-0 ml-1">
+          {headerTaskCount}
+        </span>
       </div>
 
-      {/* 保存状态提示 */}
       {saveStatus === "success" && (
         <div className="flex items-center gap-1 px-3 py-1 bg-green-50 text-xs text-green-600 border-b border-green-100">
           <CheckCircle2 size={11} /> 已保存
@@ -801,175 +1388,220 @@ function NodeColumn({
         </div>
       )}
 
-      {/* 任务卡片区 */}
+      {postSaveHint && (
+        <div className="px-3 py-1.5 bg-blue-50 text-[11px] text-blue-700 border-b border-blue-100 leading-tight">
+          已保存 {postSaveHint.count} 条。想一次录多条？试试「批量导入」
+        </div>
+      )}
+
       <div className="flex-1 p-2 space-y-1.5 overflow-y-auto max-h-[480px]">
-        {visibleTasks.length === 0 && !onlyManual && (
+        {visibleTasks.length === 0 && !readOnly && (
           <div
             onClick={onAddTask}
             className="flex flex-col items-center justify-center py-6 text-xs text-gray-400 border-2 border-dashed rounded-lg cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors"
           >
             <Plus size={14} className="mb-1" />
-            点击添加任务
+            {onlyManual ? "点这里加★纯线下任务" : "点击添加任务"}
           </div>
         )}
-        {onlyManual && visibleTasks.length === 0 && (
-          <div className="text-center py-4 text-xs text-gray-400">暂无纯线下任务</div>
+        {visibleTasks.length === 0 && readOnly && (
+          <div className="text-center py-4 text-xs text-gray-400">
+            {onlyManual ? "暂无纯线下任务" : "暂无任务"}
+          </div>
         )}
-        {visibleTasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            progress={task.saved ? (progressMap[task.taskName] ?? 0) : undefined}
-            onUpdate={(updates) => onUpdateTask(task.id, updates)}
-            onRemove={() => onRemoveTask(task.id)}
-            onNavigate={() => onNavigateToTask(task.taskName)}
-          />
-        ))}
+        {visibleTasks.map((task) => {
+          const hasSubmission =
+            !!task.taskName &&
+            tasksWithSubmissions.has(task.taskName.trim());
+          const canDelete =
+            !readOnly &&
+            task.saved &&
+            !!task.recordId &&
+            (isAdmin || !hasSubmission);
+          const canSelect =
+            !readOnly &&
+            task.saved &&
+            !!task.recordId &&
+            (isAdmin || !hasSubmission);
+          return (
+            <TaskCard
+              key={task.id}
+              task={task}
+              progress={
+                task.saved && task.label === "pure_manual"
+                  ? progressMap[task.taskName] ?? 0
+                  : undefined
+              }
+              readOnly={readOnly}
+              hasSubmission={hasSubmission}
+              canDelete={canDelete}
+              canSelect={canSelect}
+              selected={!!task.recordId && selectedIds.has(task.recordId)}
+              onToggleSelect={() => task.recordId && onToggleSelect(task.recordId)}
+              onRequestDelete={() =>
+                task.recordId && onRequestDeleteOne(task.recordId, task.taskName)
+              }
+              onNavigate={() => onNavigateToTask(task.taskName)}
+            />
+          );
+        })}
       </div>
 
-      {/* 底部操作区 */}
-      <div className="p-2 border-t border-gray-100 space-y-1">
-        {hasUnsaved && (
-          <Button size="sm" className="w-full h-7 text-xs" disabled={isSaving} onClick={onSave}>
-            <Save size={11} className="mr-1" />
-            {isSaving ? "保存中..." : "保存到飞书"}
-          </Button>
-        )}
-        <div className="flex gap-1">
-          <button
-            onClick={onAddTask}
-            className="flex-1 flex items-center justify-center gap-0.5 h-7 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
-          >
-            <Plus size={11} /> 添加
-          </button>
-          <button
-            onClick={onOpenBatch}
-            title={`批量导入：${sectionName} > ${node.name}`}
-            className="flex-1 flex items-center justify-center gap-0.5 h-7 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 rounded border border-gray-200 transition-colors"
-          >
-            <ClipboardList size={11} /> 批量导入
-          </button>
+      {!readOnly && (
+        <div className="p-2 border-t border-gray-100 space-y-1">
+          <div className="flex gap-1">
+            <button
+              onClick={onAddTask}
+              className="flex-1 flex items-center justify-center gap-0.5 h-7 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
+            >
+              <Plus size={11} /> 添加
+            </button>
+            <button
+              onClick={onOpenBatch}
+              title={`批量导入：${sectionName} > ${node.name}`}
+              className="flex-1 flex items-center justify-center gap-0.5 h-7 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 rounded border border-gray-200 transition-colors"
+            >
+              <ClipboardList size={11} /> 批量
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-// ─── 任务卡片 ───
+// ─── 任务卡片（已保存态；编辑态由对话框负责，不再有内联编辑） ───
 function TaskCard({
   task,
   progress,
-  onUpdate,
-  onRemove,
+  readOnly,
+  hasSubmission,
+  canDelete,
+  canSelect,
+  selected,
+  onToggleSelect,
+  onRequestDelete,
   onNavigate,
 }: {
   task: TaskRow;
   progress?: number;
-  onUpdate: (updates: Partial<TaskRow>) => void;
-  onRemove: () => void;
+  readOnly: boolean;
+  hasSubmission: boolean;
+  canDelete: boolean;
+  canSelect: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onRequestDelete: () => void;
   onNavigate: () => void;
 }) {
   const labelOpt = TASK_LABELS.find((l) => l.value === task.label);
   const isPureManual = task.label === "pure_manual";
 
-  if (task.saved) {
-    return (
-      <div
-        className={cn(
-          "rounded-lg border p-2 text-xs transition-all",
-          isPureManual ? "border-orange-300 bg-orange-50 shadow-sm" : "border-gray-200 bg-white"
+  return (
+    <div
+      className={cn(
+        "group relative rounded-lg border p-2 text-xs transition-all",
+        isPureManual
+          ? "border-orange-300 bg-orange-50 shadow-sm"
+          : "border-gray-200 bg-white",
+        selected && "ring-2 ring-blue-400 border-blue-400"
+      )}
+    >
+      <div className="flex items-start gap-1.5 mb-1.5">
+        {!readOnly && task.recordId && canSelect && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            className="mt-0.5 shrink-0 accent-blue-600 cursor-pointer"
+            title="选中以批量打标或批量删除"
+          />
         )}
-      >
-        <div className="flex items-start justify-between gap-1 mb-1.5">
+        {!readOnly && task.recordId && !canSelect && (
+          <span
+            title="该任务已有任务二提交，仅管理员可批量操作"
+            className="mt-0.5 shrink-0 inline-flex items-center justify-center w-3 h-3 text-gray-300"
+          >
+            <Lock size={10} />
+          </span>
+        )}
+        <span
+          className={cn(
+            "leading-tight break-words flex-1",
+            isPureManual ? "text-orange-900 font-medium" : "text-gray-800"
+          )}
+        >
+          {task.taskName}
+        </span>
+        {progress !== undefined && (
           <span
             className={cn(
-              "leading-tight break-words flex-1",
-              isPureManual ? "text-orange-900 font-medium" : "text-gray-800"
+              "flex-shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap",
+              progress === 4
+                ? "bg-green-100 text-green-700 border border-green-200"
+                : progress > 0
+                ? "bg-blue-100 text-blue-700 border border-blue-200"
+                : "bg-gray-100 text-gray-500 border border-gray-200"
             )}
           >
-            {task.taskName}
+            {progress}/4
           </span>
-          {progress !== undefined && (
-            <span
-              className={cn(
-                "flex-shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap",
-                progress === 4
-                  ? "bg-green-100 text-green-700 border border-green-200"
-                  : progress > 0
-                  ? "bg-blue-100 text-blue-700 border border-blue-200"
-                  : "bg-gray-100 text-gray-500 border border-gray-200"
-              )}
-            >
-              {progress}/4
-            </span>
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-1">
-          {labelOpt && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium border",
-                labelOpt.color, labelOpt.bgColor, labelOpt.borderColor
-              )}
-            >
-              {labelOpt.icon} {labelOpt.label}
-            </span>
-          )}
-        </div>
-        {isPureManual && task.saved && (
+        )}
+        {!readOnly && task.saved && task.recordId && (
           <button
             type="button"
-            onClick={onNavigate}
-            title="打开任务二，继续该日常任务的 Skill 实战"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!canDelete) return;
+              onRequestDelete();
+            }}
+            disabled={!canDelete}
+            title={
+              canDelete
+                ? "删除这条任务"
+                : "该任务已有任务二提交，只有管理员可删除"
+            }
             className={cn(
-              "mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg py-2 px-2",
-              "text-xs font-semibold text-white shadow-sm border border-orange-700",
-              "bg-orange-600 hover:bg-orange-700 active:bg-orange-800",
-              "transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-1"
+              "flex-shrink-0 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 focus:opacity-100",
+              canDelete
+                ? "text-gray-400 hover:text-red-600 hover:bg-red-50"
+                : "text-gray-300 cursor-not-allowed !opacity-60"
             )}
           >
-            <span>任务二 · Skill 实战</span>
-            <ArrowRight size={16} strokeWidth={2.5} className="flex-shrink-0" aria-hidden />
+            <Trash2 size={12} />
           </button>
         )}
       </div>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-2 space-y-1.5">
-      <input
-        autoFocus
-        value={task.taskName}
-        onChange={(e) => onUpdate({ taskName: e.target.value })}
-        placeholder="输入任务名称..."
-        className="w-full text-xs px-2 py-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
-      />
-      <div className="flex flex-wrap gap-1">
-        {TASK_LABELS.map((label) => (
-          <button
-            key={label.value}
-            onClick={() =>
-              onUpdate({ label: task.label === label.value ? "" : label.value })
-            }
-            title={label.description}
+      <div className="flex items-center justify-between gap-1">
+        {labelOpt && (
+          <span
             className={cn(
-              "px-1.5 py-0.5 rounded text-xs font-medium border transition-all",
-              task.label === label.value
-                ? cn(label.color, label.bgColor, label.borderColor, "ring-1")
-                : "text-gray-400 border-gray-200 hover:border-gray-400"
+              "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium border",
+              labelOpt.color,
+              labelOpt.bgColor,
+              labelOpt.borderColor
             )}
           >
-            {label.icon}
-          </button>
-        ))}
-        <button
-          onClick={onRemove}
-          className="ml-auto text-gray-300 hover:text-red-500 transition-colors"
-        >
-          <Trash2 size={11} />
-        </button>
+            {labelOpt.icon} {labelOpt.label}
+          </span>
+        )}
       </div>
+      {isPureManual && (
+        <button
+          type="button"
+          onClick={onNavigate}
+          title="打开任务二，继续该任务的 Skill 实战"
+          className={cn(
+            "mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg py-2 px-2",
+            "text-xs font-semibold text-white shadow-sm border border-orange-700",
+            "bg-orange-600 hover:bg-orange-700 active:bg-orange-800",
+            "transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-1"
+          )}
+        >
+          <span>任务二 · Skill 实战</span>
+          <ArrowRight size={16} strokeWidth={2.5} className="flex-shrink-0" aria-hidden />
+        </button>
+      )}
     </div>
   );
 }

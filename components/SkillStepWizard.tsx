@@ -27,6 +27,8 @@ import {
   TASK_LABELS,
   feishuLabelIsPureManual,
 } from "@/lib/constants";
+import { StepExtras } from "@/components/StepExtras";
+import { Lock } from "lucide-react";
 
 interface TaskItem {
   taskName: string;
@@ -85,6 +87,7 @@ interface Step4Data {
 interface SkillStepWizardProps {
   team: string;
   userName: string;
+  readOnly?: boolean;
 }
 
 // 构建多维度 → processId 的映射（优先读「端到端流程」字段，兜底用 sectionName）
@@ -107,7 +110,7 @@ function buildProcessLookupMap(): Record<string, string> {
 
 const PROCESS_LOOKUP = buildProcessLookupMap();
 
-export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
+export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepWizardProps) {
   const searchParams = useSearchParams();
   const preselectedTask = searchParams?.get("task") ?? null;
 
@@ -257,11 +260,12 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
   }
 
   // 按 constants 中的顺序排列 sections（只显示有任务的）
+  const emptyNodeMap: Record<string, TaskItem[]> = {};
   const orderedSections = currentProcess
     ? currentProcess.sections
         .map((sec) => ({
           section: sec,
-          nodeTasksMap: groupedTasks[sec.name] || {},
+          nodeTasksMap: groupedTasks[sec.name] || emptyNodeMap,
         }))
         .filter(({ nodeTasksMap }) =>
           Object.values(nodeTasksMap).some((arr) => arr.length > 0)
@@ -270,17 +274,19 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
 
   return (
     <div className="space-y-6">
-      {/* 下载工具卡片 */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-amber-800 mb-1">开始前请先下载必要工具</div>
-        <p className="text-xs text-amber-700 mb-3">
-          使用 <strong>Skill Creator</strong> 来创建各日常任务的子Skill；使用 <strong>母Skill框架</strong> 作为生成子Skill的基础模板。
-        </p>
-        <DownloadCard />
-      </div>
+      {/* 下载工具卡片（仅未选中任务时展示，避免进入执行态后的信息噪音） */}
+      {!selectedTask && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="text-sm font-semibold text-amber-800 mb-1">开始前请先下载必要工具</div>
+          <p className="text-xs text-amber-700 mb-3">
+            <strong>Skill Creator</strong> 用于创建子Skill；<strong>母Skill框架</strong> 是生成子Skill的基础模板。
+          </p>
+          <DownloadCard />
+        </div>
+      )}
 
-      {/* 流程横向页签 */}
-      {visibleProcesses.length > 0 && (
+      {/* 流程横向页签（已选中任务时隐藏以聚焦） */}
+      {visibleProcesses.length > 0 && !selectedTask && (
         <div className="flex gap-1 flex-wrap">
           {visibleProcesses.map((proc) => {
             const processColors: Record<string, string> = {
@@ -315,8 +321,8 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
         </div>
       )}
 
-      {/* 二维任务看板 */}
-      {currentProcess && (
+      {/* 二维任务看板（已选中任务时隐藏以聚焦） */}
+      {currentProcess && !selectedTask && (
         <div className="border border-gray-200 rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
             <div className="text-sm font-semibold text-gray-700">
@@ -366,7 +372,7 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
                     {/* 节点列 */}
                     <div className="flex flex-1">
                       {visibleNodes.map((node, nIdx) => {
-                        const nodeTasks = nodeTasksMap[node.name] || [];
+                        const nodeTasks: TaskItem[] = nodeTasksMap[node.name] || [];
                         return (
                           <div
                             key={node.id}
@@ -381,9 +387,9 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
                             </div>
                             {/* 任务卡片 */}
                             <div className="p-2 space-y-1.5">
-                              {nodeTasks.map((task) => {
-                                const isSelected =
-                                  selectedTask?.taskName === task.taskName;
+                              {nodeTasks.map((task: TaskItem) => {
+                                // 该看板仅在 !selectedTask 时渲染，isSelected 恒为 false
+                                const isSelected = false;
                                 const progress = progressMap[task.taskName] ?? 0;
                                 const labelOpt = TASK_LABELS.find((l) => task.label.includes(l.label));
                                 const isPureManual = feishuLabelIsPureManual(task.label);
@@ -463,6 +469,7 @@ export function SkillStepWizard({ team, userName }: SkillStepWizardProps) {
           userName={userName}
           task={selectedTask}
           mimoVerify={mimoVerify}
+          readOnly={readOnly}
           onClose={() => setSelectedTask(null)}
           onStepComplete={(completedCount) => {
             setProgressMap((prev) => ({
@@ -482,6 +489,7 @@ function StepTabsPanel({
   userName,
   task,
   mimoVerify,
+  readOnly = false,
   onClose,
   onStepComplete,
 }: {
@@ -489,9 +497,14 @@ function StepTabsPanel({
   userName: string;
   task: TaskItem;
   mimoVerify: boolean;
+  readOnly?: boolean;
   onClose: () => void;
   onStepComplete: (count: number) => void;
 }) {
+  const processShortName =
+    E2E_PROCESSES.find((p) => p.id === task.processId)?.shortName ||
+    task.sectionName ||
+    "";
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [stepStates, setStepStates] = useState<StepState[]>([
     { completed: false },
@@ -742,14 +755,27 @@ function StepTabsPanel({
     <div className="border border-blue-300 rounded-xl overflow-hidden shadow-sm">
       {/* 任务标题栏 */}
       <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white">
-        <div>
-          <div className="text-xs text-blue-200">
-            {task.sectionName} › {task.nodeName}
+        <div className="min-w-0">
+          <div className="text-xs text-blue-200 flex items-center gap-1.5 flex-wrap">
+            <span>{processShortName}</span>
+            <span>›</span>
+            <span>{task.sectionName}</span>
+            <span>›</span>
+            <span>{task.nodeName}</span>
+            {readOnly && (
+              <span className="inline-flex items-center gap-1 bg-white/20 text-white text-[10px] px-1.5 py-0.5 rounded">
+                <Lock size={10} /> 只读
+              </span>
+            )}
           </div>
-          <div className="font-semibold">{task.taskName}</div>
+          <div className="font-semibold truncate">{task.taskName}</div>
         </div>
-        <button onClick={onClose} className="text-blue-200 hover:text-white transition-colors">
-          <X size={18} />
+        <button
+          onClick={onClose}
+          title="换一个任务"
+          className="flex items-center gap-1 text-xs text-blue-100 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors"
+        >
+          <X size={14} /> 换一个
         </button>
       </div>
 
@@ -849,7 +875,7 @@ function StepTabsPanel({
               onChange={(v) => setStep1((p) => ({ ...p, accuracy1: v }))}
             />
             <Button
-              disabled={!step1Ready || !!submitting}
+              disabled={readOnly || !step1Ready || !!submitting}
               onClick={() =>
                 saveToFeishu(1, [
                   { contentType: "知识库", files: step1.knowledgeBase },
@@ -863,10 +889,24 @@ function StepTabsPanel({
             >
               {submitting === 1 ? (
                 <><Loader2 size={16} className="animate-spin mr-2" /> 保存中...</>
+              ) : readOnly ? (
+                <><Lock size={14} className="mr-2" /> 只读模式</>
               ) : (
                 <><Send size={16} className="mr-2" /> 提交第一步 →</>
               )}
             </Button>
+
+            <StepExtras
+              team={team}
+              task={{
+                taskName: task.taskName,
+                sectionName: task.sectionName,
+                nodeName: task.nodeName,
+                processShortName,
+              }}
+              step={1}
+              readOnly={readOnly}
+            />
           </div>
         )}
 
@@ -905,7 +945,7 @@ function StepTabsPanel({
               </div>
             )}
             <Button
-              disabled={!step2Ready || !!submitting}
+              disabled={readOnly || !step2Ready || !!submitting}
               onClick={() =>
                 saveToFeishu(2, [
                   { contentType: "调优数据源", file: step2.dataSource2 },
@@ -917,10 +957,24 @@ function StepTabsPanel({
             >
               {submitting === 2 ? (
                 <><Loader2 size={16} className="animate-spin mr-2" /> 保存中...</>
+              ) : readOnly ? (
+                <><Lock size={14} className="mr-2" /> 只读模式</>
               ) : (
                 <><Send size={16} className="mr-2" /> 提交第二步 →</>
               )}
             </Button>
+
+            <StepExtras
+              team={team}
+              task={{
+                taskName: task.taskName,
+                sectionName: task.sectionName,
+                nodeName: task.nodeName,
+                processShortName,
+              }}
+              step={2}
+              readOnly={readOnly}
+            />
           </div>
         )}
 
@@ -991,7 +1045,7 @@ function StepTabsPanel({
               </Button>
             )}
             <Button
-              disabled={!step3Ready || !!submitting}
+              disabled={readOnly || !step3Ready || !!submitting}
               onClick={() =>
                 saveToFeishu(3, [
                   { contentType: "对比分析报告", file: step3.report3, aiResult: step3.validationResult?.feedback },
@@ -1001,10 +1055,24 @@ function StepTabsPanel({
             >
               {submitting === 3 ? (
                 <><Loader2 size={16} className="animate-spin mr-2" /> 保存中...</>
+              ) : readOnly ? (
+                <><Lock size={14} className="mr-2" /> 只读模式</>
               ) : (
                 <><Send size={16} className="mr-2" /> 提交第三步 →</>
               )}
             </Button>
+
+            <StepExtras
+              team={team}
+              task={{
+                taskName: task.taskName,
+                sectionName: task.sectionName,
+                nodeName: task.nodeName,
+                processShortName,
+              }}
+              step={3}
+              readOnly={readOnly}
+            />
           </div>
         )}
 
@@ -1095,7 +1163,7 @@ function StepTabsPanel({
               </Button>
             )}
             <Button
-              disabled={!step4Ready || !!submitting}
+              disabled={readOnly || !step4Ready || !!submitting}
               onClick={() =>
                 saveToFeishu(4, [
                   { contentType: "调优知识库", files: step4.knowledgeBase3 },
@@ -1109,10 +1177,24 @@ function StepTabsPanel({
             >
               {submitting === 4 ? (
                 <><Loader2 size={16} className="animate-spin mr-2" /> 保存中...</>
+              ) : readOnly ? (
+                <><Lock size={14} className="mr-2" /> 只读模式</>
               ) : (
                 <><CheckCircle2 size={16} className="mr-2" /> 完成全部步骤！提交第四步</>
               )}
             </Button>
+
+            <StepExtras
+              team={team}
+              task={{
+                taskName: task.taskName,
+                sectionName: task.sectionName,
+                nodeName: task.nodeName,
+                processShortName,
+              }}
+              step={4}
+              readOnly={readOnly}
+            />
           </div>
         )}
       </div>

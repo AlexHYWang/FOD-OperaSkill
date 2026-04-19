@@ -1,9 +1,19 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { Check, X, Pencil, ChevronDown, ChevronUp, Filter } from "lucide-react";
+import {
+  Check,
+  X,
+  Pencil,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
 import { PRESET_TEAMS, E2E_PROCESSES } from "@/lib/constants";
+
+const FILTER_HINT_KEY = "fod-filter-hint-dashboard-seen";
 
 interface UserInfo {
   open_id: string;
@@ -70,7 +80,27 @@ export function OverviewSection({ team, isAdmin, user }: Props) {
   const [editValue, setEditValue] = useState("");
   const [savingTeam, setSavingTeam] = useState<string | null>(null);
   const [drillExpanded, setDrillExpanded] = useState(false);
+  const [showFilterHint, setShowFilterHint] = useState(false);
   const editRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const seen = localStorage.getItem(FILTER_HINT_KEY);
+    if (!seen) {
+      setShowFilterHint(true);
+      const timer = setTimeout(() => setShowFilterHint(false), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const dismissHint = useCallback(() => {
+    setShowFilterHint(false);
+    try {
+      localStorage.setItem(FILTER_HINT_KEY, "1");
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -133,9 +163,8 @@ export function OverviewSection({ team, isAdmin, user }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* 顶部控制栏 */}
+      {/* 流程 Tab */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* 流程 Tab */}
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
           {PROCESS_TABS.map((tab) => (
             <button
@@ -152,35 +181,103 @@ export function OverviewSection({ team, isAdmin, user }: Props) {
             </button>
           ))}
         </div>
+      </div>
 
-        {/* 纯线下筛选 */}
+      {/* 筛选状态条 */}
+      <div
+        className={cn(
+          "relative rounded-xl border bg-blue-50/70 border-blue-200 px-4 py-2.5 flex items-center flex-wrap gap-3",
+          showFilterHint && "ring-2 ring-blue-400 animate-pulse"
+        )}
+      >
+        <div className="flex items-center gap-1.5 text-xs text-blue-700 font-semibold shrink-0">
+          <SlidersHorizontal size={14} />
+          当前视图
+        </div>
+
         <button
-          onClick={() => setOnlyManual((v) => !v)}
+          onClick={() => {
+            setOnlyManual((v) => !v);
+            dismissHint();
+          }}
           className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-all",
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
             onlyManual
-              ? "bg-orange-50 border-orange-300 text-orange-700 font-medium"
-              : "bg-white border-gray-200 text-gray-500 hover:text-gray-700"
+              ? "bg-orange-500 text-white border-orange-500 shadow-sm"
+              : "bg-white text-gray-700 border-gray-300 hover:border-orange-400 hover:text-orange-600"
           )}
+          title="只统计 ★纯线下 任务的进度；想看整体时再关掉"
         >
-          <Filter size={13} />
-          仅展示纯线下
+          <span>★ 仅展示纯线下</span>
+          {onlyManual && (
+            <span
+              className="opacity-80 hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOnlyManual(false);
+                dismissHint();
+              }}
+            >
+              <X size={10} />
+            </span>
+          )}
         </button>
 
-        {/* 管理员下钻开关 */}
         {isAdmin && activeProcess !== "all" && (
           <button
-            onClick={() => setDrillExpanded((v) => !v)}
+            onClick={() => {
+              setDrillExpanded((v) => !v);
+              dismissHint();
+            }}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-all",
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
               drillExpanded
-                ? "bg-emerald-50 border-emerald-300 text-emerald-700 font-medium"
-                : "bg-white border-gray-200 text-gray-500 hover:text-gray-700"
+                ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
+                : "bg-white text-gray-700 border-gray-300 hover:border-emerald-400 hover:text-emerald-600"
             )}
           >
-            {drillExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {drillExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             全团队任务下钻
           </button>
+        )}
+
+        {onlyManual && (
+          <button
+            onClick={() => {
+              setOnlyManual(false);
+              dismissHint();
+            }}
+            className="text-xs text-gray-500 hover:text-red-500 ml-1 flex items-center gap-1"
+            title="清除筛选"
+          >
+            <X size={12} /> 清除筛选
+          </button>
+        )}
+
+        <div className="flex-1" />
+
+        <div className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+          {onlyManual
+            ? "已切换到 ★纯线下视图，数据仅统计该标签任务"
+            : "默认全部任务视图，点左侧可切换筛选"}
+        </div>
+
+        {showFilterHint && (
+          <div className="absolute -top-3 right-3 translate-y-[-100%] bg-blue-600 text-white rounded-lg px-3 py-2 text-xs shadow-lg flex items-start gap-2 max-w-xs z-10">
+            <Sparkles size={12} className="mt-0.5 shrink-0" />
+            <div className="leading-relaxed">
+              想只看 ★纯线下 任务？
+              <br />
+              点「仅展示纯线下」切换，再点一次关闭
+            </div>
+            <button
+              onClick={dismissHint}
+              className="shrink-0 text-white/70 hover:text-white"
+              title="我知道了"
+            >
+              <X size={12} />
+            </button>
+          </div>
         )}
       </div>
 
