@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     if (team && tableNum === "1") {
       filter = `CurrentValue.[团队名称]="${team}"`;
     } else if (team && taskName && tableNum === "2") {
-      filter = `AND(CurrentValue.[团队名称]="${team}",CurrentValue.[关联任务]="${taskName}")`;
+      filter = `AND(CurrentValue.[团队名称]="${team}",CurrentValue.[所属场景]="${taskName}")`;
     } else if (team && tableNum === "2") {
       filter = `CurrentValue.[团队名称]="${team}"`;
     } else if (team && ["4", "5", "6"].includes(tableNum)) {
@@ -160,7 +160,7 @@ export async function DELETE(request: NextRequest) {
 
     const { appToken, tableId } = getTableConfig(tableNum);
 
-    // 读取当前记录，拿到 任务名称 + 团队
+    // 读取当前记录，拿到 场景名称 + 团队
     const allT1 = await getAllRecords(appToken, tableId);
     const target = allT1.find((r) => r.record_id === recordId);
     if (!target) {
@@ -169,15 +169,17 @@ export async function DELETE(request: NextRequest) {
         { status: 404 }
       );
     }
-    const taskName = String(target.fields["任务名称"] || "").trim();
+    const taskName = String(
+      target.fields["场景名称"] || target.fields["任务名称"] || ""
+    ).trim();
     const team = String(target.fields["团队名称"] || "").trim();
 
-    // 检查该任务是否已有任务二提交
+    // 检查该场景是否已有 Skill 打磨提交
     let hasSubmissions = false;
     if (taskName && team) {
       const table2Id = process.env.FEISHU_TABLE2_ID;
       if (table2Id) {
-        const filter = `AND(CurrentValue.[团队名称]="${team}",CurrentValue.[关联任务]="${taskName}")`;
+        const filter = `AND(CurrentValue.[团队名称]="${team}",CurrentValue.[所属场景]="${taskName}")`;
         const t2Records = await getAllRecords(appToken, table2Id, filter);
         hasSubmissions = t2Records.length > 0;
       }

@@ -62,13 +62,16 @@ function formatDate(ms?: number): string {
   });
 }
 
-// ─── 关联标签（端到端/环节/节点/任务/步骤） ─────
+// ─── 关联标签（端到端/环节/节点/场景/步骤） ─────
 function BindingTags({ rec }: { rec: BitableRecord }) {
   const e2e = asString(rec.fields["端到端流程"]);
   const section = asString(rec.fields["环节"]);
   const node = asString(rec.fields["节点"]);
   const taskName =
-    asString(rec.fields["关联任务名"]) || asString(rec.fields["关联任务"]);
+    asString(rec.fields["关联场景名"]) ||
+    asString(rec.fields["关联任务名"]) ||
+    asString(rec.fields["所属场景"]) ||
+    asString(rec.fields["关联任务"]);
   const step = asString(rec.fields["步骤编号"]);
   const stepList = asString(rec.fields["步骤编号列表"]);
   const bindType = asString(rec.fields["关联类型"]);
@@ -97,7 +100,7 @@ function BindingTags({ rec }: { rec: BitableRecord }) {
       )}
       {taskName && (
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100 max-w-[200px] truncate">
-          任务：{taskName}
+          场景：{taskName}
         </span>
       )}
       {(step || stepList) && (
@@ -247,8 +250,8 @@ export function BlockersGoalsSection({ team, isAdmin, user, mode }: Props) {
           看板只汇总展示。要
           {isBlockers ? "登记卡点" : "登记明日目标"}
           ，请到
-          <b className="mx-1">作业中心 · 任务二</b>
-          的具体步骤内填写，会自动带上 任务/步骤 绑定信息。
+          <b className="mx-1">作业中心 · 打磨 Skill</b>
+          的具体步骤内填写，会自动带上 场景/步骤 绑定信息。
         </div>
         <button
           onClick={() => router.push("/section2")}
@@ -306,7 +309,7 @@ function BlockersByDesc({
           onClick={onGoToHub}
           className="inline-flex items-center gap-1 text-sm text-blue-700 font-medium hover:text-blue-900 bg-white border border-blue-200 rounded-lg px-3 py-1.5"
         >
-          去作业中心 · 任务二登记 <ArrowRight size={13} />
+          去作业中心 · 打磨 Skill 登记 <ArrowRight size={13} />
         </button>
       </div>
     );
@@ -445,7 +448,7 @@ function GoalsList({
           onClick={onGoToHub}
           className="inline-flex items-center gap-1 text-sm text-emerald-700 font-medium hover:text-emerald-900 bg-white border border-emerald-200 rounded-lg px-3 py-1.5"
         >
-          去作业中心 · 任务二登记 <ArrowRight size={13} />
+          去作业中心 · 打磨 Skill 登记 <ArrowRight size={13} />
         </button>
       </div>
     );

@@ -142,7 +142,7 @@ interface TaskEntry {
   accuracy: number | null;
 }
 
-// 扁平任务项：每个任务一条（同一任务被多团队做时也只有一条，团队数据内嵌在 byTeam）
+// 扁平场景项：每个场景一条（同一场景被多团队做时也只有一条，团队数据内嵌在 byTeam）
 interface TaskItem {
   taskKey: string; // processId::sectionName::nodeName::taskName
   processId: string;
@@ -151,8 +151,8 @@ interface TaskItem {
   nodeName: string;
   taskName: string;
   byTeam: Record<string, Record<number, TaskEntry[]>>; // team → step → entries
-  submittedSteps: number; // 该任务跨所有相关团队最多被提交了几个步骤（仅当前视图团队）
-  viewTeams: string[]; // 本视图下涉及该任务的团队列表
+  submittedSteps: number; // 该场景跨所有相关团队最多被提交了几个步骤（仅当前视图团队）
+  viewTeams: string[]; // 本视图下涉及该场景的团队列表
 }
 
 // ───────────────── 主组件 ─────────────────
@@ -184,7 +184,7 @@ export function OutputsAccuracySection({ team, isAdmin }: Props) {
       .finally(() => setLoading(false));
   }, [team, isAdmin]);
 
-  // 从 Table1 构建任务上下文：key = "团队::任务名" → 任务结构信息
+  // 从 Table1 构建场景上下文：key = "团队::场景名" → 场景结构信息
   const taskInfoMap = useMemo(() => {
     const m = new Map<
       string,
@@ -197,7 +197,8 @@ export function OutputsAccuracySection({ team, isAdmin }: Props) {
     >();
     for (const rec of table1Records) {
       const teamName = rec.fields["团队名称"] as string;
-      const taskName = rec.fields["任务名称"] as string;
+      const taskName = (rec.fields["场景名称"] ||
+        rec.fields["任务名称"]) as string;
       const e2eRaw = rec.fields["端到端流程"] as string | undefined;
       const sectionName = (rec.fields["流程环节"] as string) || "未分类";
       const nodeName = (rec.fields["流程节点"] as string) || "未分类";
@@ -215,13 +216,14 @@ export function OutputsAccuracySection({ team, isAdmin }: Props) {
     return m;
   }, [table1Records]);
 
-  // 构建扁平任务列表
+  // 构建扁平场景列表
   const allTasks = useMemo((): TaskItem[] => {
     const taskMap = new Map<string, TaskItem>();
 
     for (const rec of table2Records) {
       const t = rec.fields["团队名称"] as string;
-      const taskName = rec.fields["关联任务"] as string;
+      const taskName = (rec.fields["所属场景"] ||
+        rec.fields["关联任务"]) as string;
       const step = Number(rec.fields["步骤编号"] ?? 0);
       const fileName = (rec.fields["文件名称"] as string) || "";
       const fileLink = extractFileLink(rec.fields["文件链接"]);
@@ -273,7 +275,7 @@ export function OutputsAccuracySection({ team, isAdmin }: Props) {
       it.submittedSteps = submittedStepSet.size;
     }
 
-    // 排序：按流程 id → 环节 → 节点 → 任务名
+    // 排序：按流程 id → 环节 → 节点 → 场景名
     items.sort((a, b) => {
       if (a.processId !== b.processId)
         return a.processId.localeCompare(b.processId);
@@ -303,7 +305,7 @@ export function OutputsAccuracySection({ team, isAdmin }: Props) {
     return map;
   }, [filteredTasks]);
 
-  // smart 默认折叠策略：任务总数 ≥ 8 时自动折叠除第一个组之外的所有组
+  // smart 默认折叠策略：场景总数 ≥ 8 时自动折叠除第一个组之外的所有组
   // 仅当 processTab 为 all 且首次加载数据时计算
   useEffect(() => {
     if (processTab !== "all") return;
@@ -329,10 +331,10 @@ export function OutputsAccuracySection({ team, isAdmin }: Props) {
 
   // 顶部统计（当前筛选下）
   const stats = useMemo(() => {
-    let totalSlots = 0; // 任务数 × 4
+    let totalSlots = 0; // 场景数 × 4
     let submittedSlots = 0;
     for (const t of filteredTasks) {
-      // 一个任务有 4 个步骤"槽位"；若有多团队则每个团队各 4 个
+      // 一个场景有 4 个步骤"槽位"；若有多团队则每个团队各 4 个
       const teamCount = Math.max(1, t.viewTeams.length);
       totalSlots += teamCount * 4;
       for (const teamData of Object.values(t.byTeam)) {
@@ -456,7 +458,7 @@ function StatsBar({
         <span className="text-2xl font-bold text-gray-900">
           {stats.taskCount}
         </span>
-        <span className="text-xs text-gray-500">个任务</span>
+        <span className="text-xs text-gray-500">个场景</span>
       </div>
       <div className="h-8 w-px bg-gray-200" />
       <div className="flex items-baseline gap-1.5">
@@ -536,7 +538,7 @@ function ProcessGroup({
           )}
           <span className="font-bold text-sm">{processName}</span>
           <span className="text-xs font-semibold bg-white/70 px-2 py-0.5 rounded-full">
-            {items.length} 个任务
+            {items.length} 个场景
           </span>
         </button>
       )}
@@ -561,7 +563,7 @@ function ProcessGroup({
   );
 }
 
-// ───────────────── 任务卡片 ─────────────────
+// ───────────────── 场景卡片 ─────────────────
 function TaskCard({
   task,
   subTab,
@@ -890,7 +892,7 @@ function EmptyState({
           : `${processLabel} 流程下暂无提交记录`}
       </div>
       <div className="text-xs text-gray-300">
-        请先到【任务二 Skill 实战】中提交步骤文件
+        请先到【打磨 Skill】中提交步骤文件
       </div>
     </div>
   );

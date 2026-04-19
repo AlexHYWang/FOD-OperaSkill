@@ -141,7 +141,9 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
         const seen = new Set<string>();
         const items: TaskItem[] = [];
         for (const rec of r1.records) {
-          const taskName = String(rec.fields["任务名称"] || "");
+          const taskName = String(
+            rec.fields["场景名称"] || rec.fields["任务名称"] || ""
+          );
           const sectionName = String(rec.fields["流程环节"] || "");
           const nodeName = String(rec.fields["流程节点"] || "");
           const label = String(rec.fields["标签"] || "");
@@ -154,7 +156,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
         }
         setTasks(items);
 
-        // 自动预选 URL query task（仅 ★ 纯线下任务可进入任务二）
+        // 自动预选 URL query task（仅 ★ 纯线下场景可进入「打磨 Skill」）
         if (preselectedTask) {
           const found = items.find((t) => t.taskName === preselectedTask);
           if (found && feishuLabelIsPureManual(found.label)) {
@@ -169,7 +171,9 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
       if (r2.success) {
         const stepsPerTask: Record<string, Set<number>> = {};
         for (const rec of r2.records) {
-          const taskName = String(rec.fields["关联任务"] || "");
+          const taskName = String(
+            rec.fields["所属场景"] || rec.fields["关联任务"] || ""
+          );
           const step = Number(rec.fields["步骤编号"]);
           const status = String(rec.fields["步骤状态"] || "");
           if (!taskName || status !== "已完成") continue;
@@ -183,7 +187,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
         setProgressMap(prog);
       }
     } catch (err) {
-      console.error("加载任务失败:", err);
+      console.error("加载场景失败:", err);
     } finally {
       setLoadingTasks(false);
     }
@@ -195,7 +199,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
 
   const manualTasks = tasks.filter((t) => feishuLabelIsPureManual(t.label));
 
-  // 任务二仅展示纯线下：若当前选中任务不符合则清除
+  // 「打磨 Skill」仅展示纯线下：若当前选中场景不符合则清除
   useEffect(() => {
     setSelectedTask((prev) => {
       if (!prev) return null;
@@ -205,7 +209,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
     });
   }, [tasks]);
 
-  // 有纯线下任务的 processId 集合
+  // 有纯线下场景的 processId 集合
   const activeProcessIds = new Set(manualTasks.map((t) => t.processId).filter(Boolean));
   const visibleProcesses = E2E_PROCESSES.filter((p) => activeProcessIds.has(p.id));
 
@@ -226,7 +230,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
     return (
       <div className="flex items-center gap-2 py-8 justify-center text-gray-500 text-sm">
         <Loader2 size={16} className="animate-spin" />
-        正在加载 {team} 的任务列表...
+        正在加载 {team} 的场景列表...
       </div>
     );
   }
@@ -234,7 +238,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
   if (tasks.length === 0) {
     return (
       <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-4">
-        该团队暂无任务记录，请先完成任务一「Skill↔流程节点映射」并保存任务。
+        该团队暂无场景记录，请先在「梳理场景」里录入日常工作场景并保存。
       </div>
     );
   }
@@ -242,14 +246,14 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
   if (manualTasks.length === 0) {
     return (
       <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-4">
-        该团队暂无标记为「★ 纯线下」的日常任务。任务二仅展示纯线下任务，请先在任务一中为需要实战的任务打上纯线下标签。
+        该团队暂无标记为「★ 纯线下」的场景。「打磨 Skill」仅展示纯线下场景，请先在「梳理场景」里为需要打磨的场景打上纯线下标签。
       </div>
     );
   }
 
   const currentProcess = visibleProcesses.find((p) => p.id === activeProcessId) ?? visibleProcesses[0];
 
-  // 当前流程下，按 sectionName → nodeName 分组的任务
+  // 当前流程下，按 sectionName → nodeName 分组的场景
   const groupedTasks: Record<string, Record<string, TaskItem[]>> = {};
   for (const task of manualTasks) {
     if (task.processId !== currentProcess?.id) continue;
@@ -259,7 +263,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
     groupedTasks[task.sectionName][task.nodeName].push(task);
   }
 
-  // 按 constants 中的顺序排列 sections（只显示有任务的）
+  // 按 constants 中的顺序排列 sections（只显示有场景的）
   const emptyNodeMap: Record<string, TaskItem[]> = {};
   const orderedSections = currentProcess
     ? currentProcess.sections
@@ -274,7 +278,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
 
   return (
     <div className="space-y-6">
-      {/* 下载工具卡片（仅未选中任务时展示，避免进入执行态后的信息噪音） */}
+      {/* 下载工具卡片（仅未选中场景时展示，避免进入执行态后的信息噪音） */}
       {!selectedTask && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
           <div className="text-sm font-semibold text-amber-800 mb-1">开始前请先下载必要工具</div>
@@ -285,7 +289,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
         </div>
       )}
 
-      {/* 流程横向页签（已选中任务时隐藏以聚焦） */}
+      {/* 流程横向页签（已选中场景时隐藏以聚焦） */}
       {visibleProcesses.length > 0 && !selectedTask && (
         <div className="flex gap-1 flex-wrap">
           {visibleProcesses.map((proc) => {
@@ -321,12 +325,12 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
         </div>
       )}
 
-      {/* 二维任务看板（已选中任务时隐藏以聚焦） */}
+      {/* 二维场景看板（已选中场景时隐藏以聚焦） */}
       {currentProcess && !selectedTask && (
         <div className="border border-gray-200 rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
             <div className="text-sm font-semibold text-gray-700">
-              {currentProcess.name} — 选择要完成的日常任务
+              {currentProcess.name} — 选择要打磨的场景
             </div>
             <button
               onClick={loadData}
@@ -385,7 +389,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
                             <div className="px-2 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 truncate">
                               {node.name}
                             </div>
-                            {/* 任务卡片 */}
+                            {/* 场景卡片 */}
                             <div className="p-2 space-y-1.5">
                               {nodeTasks.map((task: TaskItem) => {
                                 // 该看板仅在 !selectedTask 时渲染，isSelected 恒为 false
@@ -461,7 +465,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
         </div>
       )}
 
-      {/* 选中任务的步骤操作面板 */}
+      {/* 选中场景的步骤操作面板 */}
       {selectedTask && (
         <StepTabsPanel
           key={selectedTask.taskName}
@@ -605,6 +609,7 @@ function StepTabsPanel({
                 table: "2",
                 fields: {
                   团队名称: team,
+                  所属场景: task.taskName,
                   关联任务: task.taskName,
                   步骤编号: stepNum,
                   内容类型: item.contentType,
@@ -626,6 +631,7 @@ function StepTabsPanel({
             table: "2",
             fields: {
               团队名称: team,
+              所属场景: task.taskName,
               关联任务: task.taskName,
               步骤编号: stepNum,
               内容类型: item.contentType,
@@ -753,7 +759,7 @@ function StepTabsPanel({
 
   return (
     <div className="border border-blue-300 rounded-xl overflow-hidden shadow-sm">
-      {/* 任务标题栏 */}
+      {/* 场景标题栏 */}
       <div className="flex items-center justify-between px-4 py-3 bg-blue-600 text-white">
         <div className="min-w-0">
           <div className="text-xs text-blue-200 flex items-center gap-1.5 flex-wrap">
@@ -772,7 +778,7 @@ function StepTabsPanel({
         </div>
         <button
           onClick={onClose}
-          title="换一个任务"
+          title="换一个场景"
           className="flex items-center gap-1 text-xs text-blue-100 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors"
         >
           <X size={14} /> 换一个
@@ -842,7 +848,7 @@ function StepTabsPanel({
           <div className="space-y-4">
             <MultiFileUploader
               label="知识库文件"
-              hint="上传该日常任务对应的知识库文档（规则、流程说明等），支持一次选多个文件"
+              hint="上传该场景对应的知识库文档（规则、流程说明等），支持一次选多个文件"
               uploaded={step1.knowledgeBase}
               onUpload={(files) => setStep1((p) => ({ ...p, knowledgeBase: files }))}
               required

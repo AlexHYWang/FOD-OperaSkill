@@ -41,14 +41,15 @@ export function ProgressDashboard({ team }: ProgressDashboardProps) {
       const data = await res.json();
       if (!data.success) return;
 
-      // 按任务名称聚合步骤
+      // 按场景名称聚合步骤
       const taskMap: Record<
         string,
         { step1: boolean; step2: boolean; step3: boolean; step4: boolean }
       > = {};
 
       for (const record of data.records) {
-        const taskName = record.fields["关联任务"] as string;
+        const taskName = (record.fields["所属场景"] ||
+          record.fields["关联任务"]) as string;
         const step = record.fields["步骤编号"] as number;
         const status = record.fields["步骤状态"] as string;
 
@@ -122,7 +123,7 @@ export function ProgressDashboard({ team }: ProgressDashboardProps) {
               {team} 整体进度
             </div>
             <div className="text-xs text-gray-500 mt-0.5">
-              {completedTasks}/{totalTasks} 个任务全部完成
+              {completedTasks}/{totalTasks} 个场景全部完成
             </div>
           </div>
           <div className="text-2xl font-bold text-blue-600">
@@ -149,7 +150,7 @@ export function ProgressDashboard({ team }: ProgressDashboardProps) {
         </button>
       </div>
 
-      {/* 任务进度列表 */}
+      {/* 场景进度列表 */}
       {loading ? (
         <div className="flex items-center justify-center py-6">
           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mr-2" />

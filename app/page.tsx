@@ -127,7 +127,7 @@ export default function HomePage() {
         <p className="text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed">
           覆盖 PTP / OTC / RTR / PIC / 税务 五大端到端流程，
           <br className="hidden sm:block" />
-          帮各团队把日常任务沉淀成可复用的 AI Skill。
+          帮各团队把日常工作场景沉淀成可复用的 AI Skill。
         </p>
 
         {!isLoggedIn && (
@@ -159,16 +159,16 @@ export default function HomePage() {
             {[
               {
                 step: "1",
-                title: "任务一 · 录日常任务",
-                desc: "把你团队的日常任务写上去，给每条打一个标签",
+                title: "梳理场景",
+                desc: "把你团队的日常工作场景列成清单，每条打一个标签",
                 href: "/section1",
                 icon: <LayoutGrid size={18} />,
                 tone: "blue",
               },
               {
                 step: "2",
-                title: "任务二 · 做 Skill 实战",
-                desc: "点 ★纯线下 的任务，按 4 步完成 Skill 打磨",
+                title: "打磨 Skill",
+                desc: "挑一个 ★纯线下 场景，按 4 步把 Skill 打磨完成",
                 href: "/section2",
                 icon: <Zap size={18} />,
                 tone: "purple",
@@ -355,13 +355,13 @@ function CardRecent({
             <span className="text-3xl font-black text-blue-600">
               {s.section1Count}
             </span>
-            <span className="text-xs text-gray-500">条 · 任务一录入</span>
+            <span className="text-xs text-gray-500">个 · 已梳理场景</span>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-purple-600">
               {s.section2StepCount}
             </span>
-            <span className="text-xs text-gray-500">步 · 任务二提交</span>
+            <span className="text-xs text-gray-500">步 · 已打磨 Skill</span>
           </div>
           {s.section1Count === 0 && s.section2StepCount === 0 && (
             <div className="mt-2 text-xs text-gray-400 leading-relaxed">
@@ -396,13 +396,13 @@ function CardInProgress({
         </div>
       ) : items.length === 0 ? (
         <div className="text-xs text-gray-400 leading-relaxed py-2">
-          还没进入任务二的第一步
+          还没打磨过任何场景
           <br />
           <button
             onClick={() => router.push("/section2")}
             className="mt-2 inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium"
           >
-            去任务二选一个任务 <ArrowRight size={12} />
+            去挑一个场景打磨 <ArrowRight size={12} />
           </button>
         </div>
       ) : (

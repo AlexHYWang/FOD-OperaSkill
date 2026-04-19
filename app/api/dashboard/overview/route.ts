@@ -84,7 +84,8 @@ export async function GET(request: NextRequest) {
 
     for (const r of table2Records) {
       const team = r.fields["团队名称"] as string;
-      const taskName = r.fields["关联任务"] as string;
+      const taskName =
+        (r.fields["所属场景"] as string) || (r.fields["关联任务"] as string);
       const step = Number(r.fields["步骤编号"] ?? 0);
       const status = r.fields["步骤状态"] as string;
 
@@ -129,7 +130,8 @@ export async function GET(request: NextRequest) {
     // 聚合每条 Table1 记录
     for (const r of filteredTable1) {
       const team = r.fields["团队名称"] as string;
-      const taskName = r.fields["任务名称"] as string;
+      const taskName =
+        (r.fields["场景名称"] as string) || (r.fields["任务名称"] as string);
       const e2eRaw = r.fields["端到端流程"] as string | undefined;
       const section = r.fields["流程环节"] as string;
       const nodeName = r.fields["流程节点"] as string;

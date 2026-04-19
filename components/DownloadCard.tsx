@@ -15,7 +15,7 @@ const DOWNLOADS: DownloadItem[] = [
   {
     name: "母 Skill 框架",
     description:
-      "包含标准化的母框架结构，是生成各日常任务子Skill的基础模板",
+      "包含标准化的母框架结构，是生成各场景子Skill的基础模板",
     fileName: "mother_framework_v1.1.3.zip",
     icon: <Package size={20} />,
     color: "text-purple-600 bg-purple-50 border-purple-200",

@@ -1,8 +1,8 @@
 /**
  * v2 迁移接口（幂等）：
  *   - Table3（人员/归属团队）：新增「角色」「部门」「归属团队」「更新时间」
- *   - Table5（主要卡点）：新增「端到端流程」「环节」「节点」「关联任务名」「步骤编号」
- *   - Table6（明日关键目标）：新增「关联类型」「端到端流程」「环节」「节点」「关联任务名」「步骤编号列表」
+ *   - Table5（主要卡点）：新增「端到端流程」「环节」「节点」「关联任务名/关联场景名」「步骤编号」
+ *   - Table6（明日关键目标）：新增「关联类型」「端到端流程」「环节」「节点」「关联任务名/关联场景名」「步骤编号列表」
  *
  * 既有管理员记录（Table3 已有数据）在迁移时统一打 角色=管理员 标签。
  *
@@ -137,7 +137,8 @@ export async function POST() {
         { field_name: "端到端流程", type: FIELD_TYPE.TEXT },
         { field_name: "环节", type: FIELD_TYPE.TEXT },
         { field_name: "节点", type: FIELD_TYPE.TEXT },
-        { field_name: "关联任务名", type: FIELD_TYPE.TEXT },
+        { field_name: "关联任务名", type: FIELD_TYPE.TEXT }, // 兼容老字段
+        { field_name: "关联场景名", type: FIELD_TYPE.TEXT }, // v3 主字段
         { field_name: "步骤编号", type: FIELD_TYPE.NUMBER },
       ]
     );
@@ -163,7 +164,8 @@ export async function POST() {
         { field_name: "端到端流程", type: FIELD_TYPE.TEXT },
         { field_name: "环节", type: FIELD_TYPE.TEXT },
         { field_name: "节点", type: FIELD_TYPE.TEXT },
-        { field_name: "关联任务名", type: FIELD_TYPE.TEXT },
+        { field_name: "关联任务名", type: FIELD_TYPE.TEXT }, // 兼容老字段
+        { field_name: "关联场景名", type: FIELD_TYPE.TEXT }, // v3 主字段
         { field_name: "步骤编号列表", type: FIELD_TYPE.TEXT },
       ]
     );

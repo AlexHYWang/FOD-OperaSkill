@@ -92,11 +92,11 @@ export default function Section1Page() {
             <div>
               <div className="flex items-center gap-2 text-blue-600 mb-0.5">
                 <LayoutGrid size={18} />
-                <span className="text-sm font-medium">任务一</span>
+                <span className="text-sm font-medium">梳理场景</span>
               </div>
-              <h1 className="text-xl font-bold text-gray-900">任务一 · 录入日常任务</h1>
+              <h1 className="text-xl font-bold text-gray-900">梳理场景 · 把团队日常工作列成清单</h1>
               <p className="text-gray-500 text-xs mt-0.5">
-                挑一个端到端流程 → 在对应节点下点「+ 添加任务」→ 给任务选一个标签 → 保存
+                挑一个端到端流程 → 在对应节点下点「+ 添加场景」→ 给场景选一个标签 → 保存
               </p>
               {!canEdit && team && profile.team && (
                 <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-xs text-amber-700">
@@ -143,7 +143,7 @@ export default function Section1Page() {
                   ? "bg-orange-500 text-white border-orange-500 shadow-sm"
                   : "bg-white text-gray-700 border-gray-300 hover:border-orange-400 hover:text-orange-600"
               )}
-              title="任务二重点改造的是★纯线下任务"
+              title="「打磨 Skill」重点改造的是★纯线下场景"
             >
               <span>★ 仅纯线下</span>
               {onlyManual && (
@@ -172,7 +172,7 @@ export default function Section1Page() {
                   : "bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:text-blue-600"
               )}
             >
-              <span>仅有任务</span>
+              <span>仅有场景</span>
               {onlyHasTasks && (
                 <span
                   className="opacity-80 hover:opacity-100"
@@ -206,7 +206,7 @@ export default function Section1Page() {
             <div className="text-xs text-gray-600 shrink-0 flex items-center gap-1.5 flex-wrap">
               <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2 py-0.5">
                 <b className="text-gray-900">{stats.visibleTasks}</b>
-                <span className="text-gray-500">条任务</span>
+                <span className="text-gray-500">个场景</span>
               </span>
               <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2 py-0.5">
                 <b className="text-gray-900">{stats.visibleNodes}</b>
@@ -214,7 +214,7 @@ export default function Section1Page() {
               </span>
               {filtersActive && stats.totalTasks > 0 && (
                 <span className="text-gray-400">
-                  （总 {stats.totalTasks} 条 / {stats.totalNodes} 节点）
+                  （总 {stats.totalTasks} 个 / {stats.totalNodes} 节点）
                 </span>
               )}
             </div>

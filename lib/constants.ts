@@ -394,7 +394,7 @@ export const TASK_LABELS: LabelOption[] = [
     value: "pure_manual",
     icon: "★",
     label: "纯线下",
-    description: "纯线下操作（本次优先在任务二中完成）",
+    description: "纯线下操作（优先进入「打磨 Skill」）",
     color: "text-orange-700",
     bgColor: "bg-orange-50",
     borderColor: "border-orange-300",

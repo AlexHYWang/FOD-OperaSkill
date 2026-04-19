@@ -74,7 +74,8 @@ export async function POST() {
         },
       },
       { field_name: "流程节点", type: FIELD_TYPE.TEXT },
-      { field_name: "任务名称", type: FIELD_TYPE.TEXT },
+      { field_name: "任务名称", type: FIELD_TYPE.TEXT }, // 兼容老字段（v2 及以前）
+      { field_name: "场景名称", type: FIELD_TYPE.TEXT }, // v3 术语场景化后主字段
       {
         field_name: "标签",
         type: FIELD_TYPE.SINGLE_SELECT,
@@ -99,7 +100,8 @@ export async function POST() {
     const table2Fields = [
       { field_name: "团队名称", type: FIELD_TYPE.TEXT },
       { field_name: "提交者", type: FIELD_TYPE.PERSON },
-      { field_name: "关联任务", type: FIELD_TYPE.TEXT },
+      { field_name: "关联任务", type: FIELD_TYPE.TEXT }, // 兼容老字段（v2 及以前）
+      { field_name: "所属场景", type: FIELD_TYPE.TEXT }, // v3 术语场景化后主字段
       { field_name: "步骤编号", type: FIELD_TYPE.NUMBER },
       { field_name: "内容类型", type: FIELD_TYPE.TEXT },
       { field_name: "文件名称", type: FIELD_TYPE.TEXT },

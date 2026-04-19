@@ -299,6 +299,7 @@ export function InlineBlockerForm({
             环节: sectionName,
             节点: nodeName,
             关联任务名: taskName,
+            关联场景名: taskName,
             步骤编号: step,
           },
         }),
@@ -436,6 +437,7 @@ export function InlineGoalForm({
         fields["环节"] = sectionName;
         fields["节点"] = nodeName;
         fields["关联任务名"] = taskName;
+        fields["关联场景名"] = taskName;
         fields["步骤编号列表"] = stepList.join(",");
       } else if (bindType === "环节节点") {
         fields["端到端流程"] = processShortName;
@@ -502,7 +504,7 @@ export function InlineGoalForm({
                     : "border-gray-200 bg-white text-gray-600 hover:border-amber-300"
                 )}
               >
-                {t}
+                {t === "任务步骤" ? "场景步骤" : t}
               </button>
             ))}
           </div>
@@ -548,13 +550,13 @@ export function InlineGoalForm({
           {bindType === "环节节点" && (
             <div className="text-[10px] text-gray-500 bg-gray-50 border border-gray-200 px-2 py-1.5 rounded">
               将绑定到环节/节点：{processShortName} · {sectionName} / {nodeName}
-              （表示该节点下的所有任务）
+              （表示该节点下的所有场景）
             </div>
           )}
 
           {bindType === "自由文本" && (
             <div className="text-[10px] text-gray-500 bg-gray-50 border border-gray-200 px-2 py-1.5 rounded">
-              不绑定具体任务/节点，仅作为纯文字目标。
+              不绑定具体场景/节点，仅作为纯文字目标。
             </div>
           )}
 

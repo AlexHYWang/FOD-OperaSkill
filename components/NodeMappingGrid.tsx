@@ -92,7 +92,7 @@ interface DeleteConfirm {
   targets: DeleteTarget[];
   stage: 1 | 2; // 1=初次确认 2=二次"真的删除？"
   blocked: boolean; // 若 true 则对普通用户禁用，仅展示阻断信息
-  blockedCount: number; // 被阻断的任务数（普通用户视角）
+  blockedCount: number; // 被阻断的场景数（普通用户视角）
   deleting: boolean;
   error?: string;
 }
@@ -136,7 +136,7 @@ export function NodeMappingGrid({
   const [applyingBulk, setApplyingBulk] = useState(false);
   const [postSaveHint, setPostSaveHint] = useState<{ nodeId: string; count: number } | null>(null);
 
-  // 哪些任务名已经在 Table2 里有任何一条提交（用来决定是否允许普通用户删除）
+  // 哪些场景已经在 Table2 里有任何一条提交（用来决定是否允许普通用户删除）
   const [tasksWithSubmissions, setTasksWithSubmissions] = useState<Set<string>>(
     new Set()
   );
@@ -185,7 +185,8 @@ export function NodeMappingGrid({
         for (const record of r1.records) {
           const nodeName = record.fields["流程节点"] as string;
           const sectionName = record.fields["流程环节"] as string;
-          const taskName = record.fields["任务名称"] as string;
+          const taskName = (record.fields["场景名称"] ||
+            record.fields["任务名称"]) as string;
           const labelRaw = record.fields["标签"] as string | undefined;
           const submittedAt = record.fields["提交时间"] as number | undefined;
           const e2eField = record.fields["端到端流程"] as string | undefined;
@@ -218,7 +219,8 @@ export function NodeMappingGrid({
       if (r2.success) {
         const stepsPerTask: Record<string, Set<number>> = {};
         for (const record of r2.records) {
-          const taskName = record.fields["关联任务"] as string;
+          const taskName = (record.fields["所属场景"] ||
+            record.fields["关联任务"]) as string;
           const step = record.fields["步骤编号"] as number;
           const status = record.fields["步骤状态"] as string;
           if (!taskName) continue;
@@ -321,6 +323,7 @@ export function NodeMappingGrid({
             端到端流程: process.shortName,
             流程环节: addState.sectionName,
             流程节点: addState.nodeName,
+            场景名称: name,
             任务名称: name,
             标签: labelText,
           },
@@ -422,6 +425,7 @@ export function NodeMappingGrid({
               端到端流程: process.shortName,
               流程环节: sectionName,
               流程节点: nodeName,
+              场景名称: row.taskName.trim(),
               任务名称: row.taskName.trim(),
               标签: labelText,
             },
@@ -474,7 +478,7 @@ export function NodeMappingGrid({
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  // 所有已保存任务（扁平化）
+  // 所有已保存场景（扁平化）
   const allSavedTasks = useMemo(() => {
     const list: { task: TaskRow; nodeId: string; nodeName: string; sectionName: string }[] = [];
     for (const section of process.sections) {
@@ -716,7 +720,7 @@ export function NodeMappingGrid({
               <div className="flex items-start justify-between mb-1">
                 <div>
                   <div className="text-xs text-blue-600 font-semibold mb-0.5">
-                    添加一个日常任务
+                    添加一个场景
                   </div>
                   <div className="text-base font-bold text-gray-900">
                     {addState.sectionName} / {addState.nodeName}
@@ -732,13 +736,13 @@ export function NodeMappingGrid({
             </div>
 
             <div className="p-5 space-y-4">
-              {/* Step1 任务名 */}
+              {/* Step1 场景名 */}
               <div>
                 <label className="text-xs font-semibold text-gray-700 flex items-center gap-1 mb-1.5">
                   <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px]">
                     1
                   </span>
-                  任务名称
+                  场景名称
                 </label>
                 <input
                   ref={addInputRef}
@@ -760,7 +764,7 @@ export function NodeMappingGrid({
                   选一个标签
                   <span className="text-red-500">*</span>
                   <span className="text-gray-400 font-normal ml-1">
-                    （必选，决定后续是否进入任务二）
+                    （必选，决定后续是否能进入「打磨 Skill」）
                   </span>
                 </label>
                 <div className="grid grid-cols-1 gap-2">
@@ -797,7 +801,7 @@ export function NodeMappingGrid({
               <div className="pt-1 text-[11px] text-gray-500 bg-gray-50 px-3 py-2 rounded-lg flex gap-1.5">
                 <ClipboardList size={12} className="shrink-0 mt-0.5 text-gray-400" />
                 <span>
-                  要一次录多条？关掉这个窗口，点节点下方的「批量导入」即可粘贴多行任务名。
+                  要一次录多条？关掉这个窗口，点节点下方的「批量导入」即可粘贴多行场景名。
                 </span>
               </div>
             </div>
@@ -827,7 +831,7 @@ export function NodeMappingGrid({
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-bold text-gray-900">批量导入任务</div>
+                <div className="font-bold text-gray-900">批量导入场景</div>
                 <div className="text-xs text-gray-500 mt-0.5">
                   节点：{batchState.nodeName}（{batchState.sectionName}）
                 </div>
@@ -840,7 +844,7 @@ export function NodeMappingGrid({
             {batchState.step === "input" ? (
               <>
                 <div className="text-sm text-gray-600">
-                  每行写一条任务名，粘完就可以下一步打标签：
+                  每行写一条场景名，粘完就可以下一步打标签：
                 </div>
                 <textarea
                   ref={batchTextRef}
@@ -849,11 +853,11 @@ export function NodeMappingGrid({
                     setBatchState((prev) => prev && { ...prev, text: e.target.value })
                   }
                   rows={8}
-                  placeholder={"任务名称1\n任务名称2\n任务名称3\n..."}
+                  placeholder={"场景名称1\n场景名称2\n场景名称3\n..."}
                   className="w-full text-sm border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none font-mono"
                 />
                 <div className="text-xs text-gray-400">
-                  已识别 {batchState.text.split("\n").filter((l) => l.trim()).length} 条任务
+                  已识别 {batchState.text.split("\n").filter((l) => l.trim()).length} 个场景
                 </div>
                 <div className="flex gap-2 justify-end">
                   <Button variant="outline" onClick={() => setBatchState(null)}>取消</Button>
@@ -918,7 +922,7 @@ export function NodeMappingGrid({
         </div>
       )}
 
-      {/* 重复任务警告 */}
+      {/* 重复场景警告 */}
       {dupAlert && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
@@ -927,7 +931,7 @@ export function NodeMappingGrid({
                 <AlertTriangle size={20} className="text-amber-600" />
               </div>
               <div>
-                <div className="font-bold text-gray-900">发现重复任务</div>
+                <div className="font-bold text-gray-900">发现重复场景</div>
                 <div className="text-xs text-gray-500 mt-0.5">
                   节点：{dupAlert.nodeName}（{dupAlert.sectionName}）
                 </div>
@@ -936,7 +940,7 @@ export function NodeMappingGrid({
 
             <div className="space-y-2">
               <div className="text-sm text-gray-700 font-medium">
-                以下 {dupAlert.duplicates.length} 条任务已提交过，将被跳过：
+                以下 {dupAlert.duplicates.length} 个场景已存在，将被跳过：
               </div>
               <div className="max-h-40 overflow-y-auto border border-amber-200 rounded-lg divide-y divide-amber-100 bg-amber-50">
                 {dupAlert.duplicates.map((d, i) => (
@@ -951,7 +955,7 @@ export function NodeMappingGrid({
             {dupAlert.newOnes.length > 0 ? (
               <div className="space-y-2">
                 <div className="text-sm text-gray-700 font-medium">
-                  以下 {dupAlert.newOnes.length} 条任务是新增的，将被保存：
+                  以下 {dupAlert.newOnes.length} 个场景是新增的，将被保存：
                 </div>
                 <div className="max-h-32 overflow-y-auto border border-green-200 rounded-lg divide-y divide-green-100 bg-green-50">
                   {dupAlert.newOnes.map((t, i) => (
@@ -963,7 +967,7 @@ export function NodeMappingGrid({
               </div>
             ) : (
               <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-600 text-center">
-                所有任务均已存在，无新内容需要保存。
+                所有场景均已存在，无新内容需要保存。
               </div>
             )}
 
@@ -972,7 +976,7 @@ export function NodeMappingGrid({
               {dupAlert.newOnes.length > 0 && (
                 <Button onClick={handleDupContinue}>
                   <Save size={14} className="mr-1" />
-                  跳过重复，保存新任务
+                  跳过重复，保存新场景
                 </Button>
               )}
             </div>
@@ -985,7 +989,7 @@ export function NodeMappingGrid({
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-white rounded-full shadow-2xl border px-5 py-2 flex items-center gap-3 animate-fade-in">
           <div className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
             <Tag size={14} className="text-blue-500" />
-            已选 {selectedIds.size} 条
+            已选 {selectedIds.size} 个场景
           </div>
           <div className="w-px h-4 bg-gray-200" />
           <div className="text-xs text-gray-400">批量打：</div>
@@ -1076,11 +1080,11 @@ function DeleteConfirmDialog({
               {confirm.blocked
                 ? "无法删除 · 仅管理员可操作"
                 : total === 1
-                ? `确认删除任务「${confirm.targets[0].taskName}」？`
-                : `确认删除选中的 ${total} 条任务？`}
+                ? `确认删除场景「${confirm.targets[0].taskName}」？`
+                : `确认删除选中的 ${total} 个场景？`}
             </div>
             <div className="text-xs text-gray-500 mt-0.5">
-              删除后不可恢复；同名任务的任务一标签会一并移除
+              删除后不可恢复；同名场景在「梳理场景」里的标签也会一并移除
             </div>
           </div>
         </div>
@@ -1099,7 +1103,7 @@ function DeleteConfirmDialog({
               </span>
               {t.hasSubmission && (
                 <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
-                  已有任务二提交
+                  已有打磨记录
                 </span>
               )}
             </div>
@@ -1113,7 +1117,7 @@ function DeleteConfirmDialog({
 
         {confirm.blocked && (
           <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 leading-relaxed">
-            其中 <b>{confirm.blockedCount}</b> 条已有任务二提交，普通用户不能删除。
+            其中 <b>{confirm.blockedCount}</b> 个场景已有打磨记录，普通用户不能删除。
             <br />
             请取消勾选这些条目，或联系管理员处理。
           </div>
@@ -1123,8 +1127,8 @@ function DeleteConfirmDialog({
           <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 leading-relaxed flex gap-2">
             <ShieldCheck size={14} className="mt-0.5 shrink-0 text-amber-600" />
             <span>
-              管理员模式：其中 <b>{submissionCount}</b> 条已有任务二提交，Table2
-              历史记录仍会保留，仅不再展示在任务一。
+              管理员模式：其中 <b>{submissionCount}</b> 个场景已有打磨记录，Table2
+              历史记录仍会保留，仅不再展示在「梳理场景」。
             </span>
           </div>
         )}
@@ -1316,7 +1320,7 @@ function NodeColumn({
   const manualTaskCount = tasks.filter((t) => t.label === "pure_manual").length;
   const headerTaskCount = onlyManual ? manualTaskCount : tasks.length;
 
-  // 可选任务：已保存 + 有 recordId + （普通用户再要求无提交；管理员全部可选）
+  // 可选场景：已保存 + 有 recordId + （普通用户再要求无提交；管理员全部可选）
   const selectableTasks = visibleTasks.filter((t) => {
     if (!t.saved || !t.recordId) return false;
     if (isAdmin) return true;
@@ -1361,10 +1365,10 @@ function NodeColumn({
               className="shrink-0 accent-blue-600 cursor-pointer"
               title={
                 allSelectedHere
-                  ? "取消选中当前节点全部任务"
+                  ? "取消选中当前节点全部场景"
                   : partiallySelectedHere
-                  ? `已选 ${selectedCountHere}/${selectableIds.length}，点击选中全部可操作任务`
-                  : `选中当前节点全部可操作任务（共 ${selectableIds.length} 条）`
+                  ? `已选 ${selectedCountHere}/${selectableIds.length}，点击选中全部可操作场景`
+                  : `选中当前节点全部可操作场景（共 ${selectableIds.length} 个）`
               }
             />
           )}
@@ -1401,12 +1405,12 @@ function NodeColumn({
             className="flex flex-col items-center justify-center py-6 text-xs text-gray-400 border-2 border-dashed rounded-lg cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors"
           >
             <Plus size={14} className="mb-1" />
-            {onlyManual ? "点这里加★纯线下任务" : "点击添加任务"}
+            {onlyManual ? "点这里加★纯线下场景" : "点击添加场景"}
           </div>
         )}
         {visibleTasks.length === 0 && readOnly && (
           <div className="text-center py-4 text-xs text-gray-400">
-            {onlyManual ? "暂无纯线下任务" : "暂无任务"}
+            {onlyManual ? "暂无纯线下场景" : "暂无场景"}
           </div>
         )}
         {visibleTasks.map((task) => {
@@ -1470,7 +1474,7 @@ function NodeColumn({
   );
 }
 
-// ─── 任务卡片（已保存态；编辑态由对话框负责，不再有内联编辑） ───
+// ─── 场景卡片（已保存态；编辑态由对话框负责，不再有内联编辑） ───
 function TaskCard({
   task,
   progress,
@@ -1519,7 +1523,7 @@ function TaskCard({
         )}
         {!readOnly && task.recordId && !canSelect && (
           <span
-            title="该任务已有任务二提交，仅管理员可批量操作"
+            title="该场景已有 Skill 打磨记录，仅管理员可批量操作"
             className="mt-0.5 shrink-0 inline-flex items-center justify-center w-3 h-3 text-gray-300"
           >
             <Lock size={10} />
@@ -1558,8 +1562,8 @@ function TaskCard({
             disabled={!canDelete}
             title={
               canDelete
-                ? "删除这条任务"
-                : "该任务已有任务二提交，只有管理员可删除"
+                ? "删除这个场景"
+                : "该场景已有 Skill 打磨记录，只有管理员可删除"
             }
             className={cn(
               "flex-shrink-0 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 focus:opacity-100",
@@ -1590,7 +1594,7 @@ function TaskCard({
         <button
           type="button"
           onClick={onNavigate}
-          title="打开任务二，继续该任务的 Skill 实战"
+          title="打开「打磨 Skill」，继续这个场景"
           className={cn(
             "mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg py-2 px-2",
             "text-xs font-semibold text-white shadow-sm border border-orange-700",
@@ -1598,7 +1602,7 @@ function TaskCard({
             "transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-1"
           )}
         >
-          <span>任务二 · Skill 实战</span>
+          <span>打磨 Skill</span>
           <ArrowRight size={16} strokeWidth={2.5} className="flex-shrink-0" aria-hidden />
         </button>
       )}

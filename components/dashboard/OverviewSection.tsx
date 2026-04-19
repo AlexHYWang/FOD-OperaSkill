@@ -206,7 +206,7 @@ export function OverviewSection({ team, isAdmin, user }: Props) {
               ? "bg-orange-500 text-white border-orange-500 shadow-sm"
               : "bg-white text-gray-700 border-gray-300 hover:border-orange-400 hover:text-orange-600"
           )}
-          title="只统计 ★纯线下 任务的进度；想看整体时再关掉"
+          title="只统计 ★纯线下 场景的进度；想看整体时再关掉"
         >
           <span>★ 仅展示纯线下</span>
           {onlyManual && (
@@ -237,7 +237,7 @@ export function OverviewSection({ team, isAdmin, user }: Props) {
             )}
           >
             {drillExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            全团队任务下钻
+            全团队场景下钻
           </button>
         )}
 
@@ -258,15 +258,15 @@ export function OverviewSection({ team, isAdmin, user }: Props) {
 
         <div className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
           {onlyManual
-            ? "已切换到 ★纯线下视图，数据仅统计该标签任务"
-            : "默认全部任务视图，点左侧可切换筛选"}
+            ? "已切换到 ★纯线下视图，数据仅统计该标签场景"
+            : "默认全部场景视图，点左侧可切换筛选"}
         </div>
 
         {showFilterHint && (
           <div className="absolute -top-3 right-3 translate-y-[-100%] bg-blue-600 text-white rounded-lg px-3 py-2 text-xs shadow-lg flex items-start gap-2 max-w-xs z-10">
             <Sparkles size={12} className="mt-0.5 shrink-0" />
             <div className="leading-relaxed">
-              想只看 ★纯线下 任务？
+              想只看 ★纯线下 场景？
               <br />
               点「仅展示纯线下」切换，再点一次关闭
             </div>
@@ -422,7 +422,7 @@ function DrillDownGrid({
 
   const sectionDrillData = drillDown[processId] ?? {};
 
-  // 构建每个节点的任务索引：nodeName → team → taskName[]
+  // 构建每个节点的场景索引：nodeName → team → taskName[]
   // drillDown 中 section → DrillTask[]，DrillTask.nodeId 是流程节点名
   const nodeTaskMap: Record<string, Record<string, { taskName: string; label: string }[]>> = {};
 
@@ -434,7 +434,7 @@ function DrillDownGrid({
     }
   }
 
-  // 决定哪些 node 要显示：纯线下模式时仅显示有纯线下任务的节点
+  // 决定哪些 node 要显示：纯线下模式时仅显示有纯线下场景的节点
   const isNodeVisible = (nodeName: string): boolean => {
     if (!onlyManual) return true;
     const teams = nodeTaskMap[nodeName] ?? {};
@@ -443,7 +443,7 @@ function DrillDownGrid({
     );
   };
 
-  // 计算每个节点有多少团队有任务（用于高亮合并潜力）
+  // 计算每个节点有多少团队有场景（用于高亮合并潜力）
   const nodeTeamCount = (nodeName: string): number => {
     return Object.keys(nodeTaskMap[nodeName] ?? {}).length;
   };
@@ -459,7 +459,7 @@ function DrillDownGrid({
   if (visibleSections.length === 0) {
     return (
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-400">
-        {onlyManual ? "纯线下筛选后无任务数据" : "该流程暂无任务数据"}
+        {onlyManual ? "纯线下筛选后无场景数据" : "该流程暂无场景数据"}
       </div>
     );
   }
@@ -472,7 +472,7 @@ function DrillDownGrid({
       <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2.5 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
         <span className="text-sm font-semibold text-emerald-700">
-          {process.name} · 全团队任务下钻
+          {process.name} · 全团队场景下钻
         </span>
         {onlyManual && (
           <span className="text-xs text-orange-600 font-normal ml-1">（仅纯线下）</span>
@@ -602,11 +602,11 @@ function DrillDownGrid({
       <div className="border-t border-gray-100 px-4 py-2 flex items-center gap-4 bg-gray-50/50">
         <span className="flex items-center gap-1 text-[11px] text-gray-500">
           <span className="w-2.5 h-2.5 rounded-sm bg-orange-50 border border-orange-200 inline-block" />
-          纯线下任务
+          纯线下场景
         </span>
         <span className="flex items-center gap-1 text-[11px] text-gray-500">
           <span className="w-2.5 h-2.5 rounded-sm bg-blue-50 border border-blue-100 inline-block" />
-          其他任务
+          其他场景
         </span>
         <span className="flex items-center gap-1 text-[11px] text-orange-500">
           <span className="w-2.5 h-2.5 rounded-sm bg-orange-50 border border-orange-300 inline-block" />

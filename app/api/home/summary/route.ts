@@ -131,7 +131,8 @@ export async function GET() {
       const submitter = extractOpenIds(r.fields["提交者"]);
       const ts = asNumber(r.fields["提交时间"]);
       const step = asNumber(r.fields["步骤编号"]);
-      const taskName = asString(r.fields["关联任务"]);
+      const taskName =
+        asString(r.fields["所属场景"]) || asString(r.fields["关联任务"]);
 
       if (ts >= weekStart) teamThisWeekSteps += 1;
 
