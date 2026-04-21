@@ -10,14 +10,13 @@ import {
   Hammer,
   FlaskConical,
   PlayCircle,
-  Cog,
-  Rocket,
   Sparkles,
   Flag,
+  Rocket,
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ROLE_THEME, type FODRole } from "@/lib/roles";
+import { ROLE_THEME, FOD_ROLES, type FODRole } from "@/lib/roles";
 import { useAuth } from "@/components/AuthProvider";
 
 interface NodeStat {
@@ -37,7 +36,6 @@ interface NodeDef {
   isMock?: boolean;
 }
 
-/** 三条水平泳道：生产流程 · 训练评测 · 使用流程 */
 type LaneKey = "prod" | "train" | "use";
 
 interface LaneDef {
@@ -69,27 +67,27 @@ const LANES: LaneDef[] = [
       {
         key: "kb_extract",
         seq: 2,
-        title: "知识库 · 提取",
-        subtitle: "上传素材",
-        href: "/knowledge/extract",
+        title: "知识库 · 提交",
+        subtitle: "一线上传素材",
+        href: "/knowledge",
         role: "FOD一线操作",
         icon: <BookOpen size={14} />,
       },
       {
         key: "kb_govern",
         seq: 3,
-        title: "知识库 · 治理",
-        subtitle: "审核整理",
-        href: "/knowledge/govern",
+        title: "知识库 · 审核",
+        subtitle: "主管治理",
+        href: "/knowledge",
         role: "FOD一线AI管理",
         icon: <GitMerge size={14} />,
       },
       {
         key: "kb_consolidate",
         seq: 4,
-        title: "知识库 · 整合",
-        subtitle: "归档下发",
-        href: "/knowledge/consolidate",
+        title: "知识库 · 发布",
+        subtitle: "综管归档下发",
+        href: "/knowledge",
         role: "FOD综管",
         icon: <ScrollText size={14} />,
       },
@@ -97,7 +95,7 @@ const LANES: LaneDef[] = [
   },
   {
     key: "train",
-    label: "训练 · 评测 · 发布",
+    label: "训练 · 评测",
     num: 2,
     accent: "bg-indigo-600 text-white",
     ring: "border-indigo-100 bg-indigo-50/40",
@@ -105,9 +103,9 @@ const LANES: LaneDef[] = [
       {
         key: "skill_train",
         seq: 5,
-        title: "Skill 训练",
-        subtitle: "4 步打磨",
-        href: "/section2",
+        title: "打磨 Skill",
+        subtitle: "OpenClaw 4 步向导",
+        href: "/skill-forge",
         role: "FOD一线操作",
         icon: <Hammer size={14} />,
       },
@@ -115,9 +113,9 @@ const LANES: LaneDef[] = [
         key: "eval_dataset",
         seq: 6,
         title: "评测集管理",
-        subtitle: "题库上传",
-        href: "/evaluation/dataset",
-        role: "FOD一线操作",
+        subtitle: "数据快照 + 标准答案",
+        href: "/evaluation",
+        role: "FOD一线AI管理",
         icon: <FlaskConical size={14} />,
       },
       {
@@ -125,27 +123,17 @@ const LANES: LaneDef[] = [
         seq: 7,
         title: "评测执行",
         subtitle: "批跑准确率",
-        href: "/evaluation/run",
-        role: "FOD一线操作",
+        href: "/evaluation",
+        role: "FOD一线AI管理",
         icon: <PlayCircle size={14} />,
       },
       {
-        key: "prod_debug",
-        seq: 8,
-        title: "生产级调试",
-        subtitle: "IT 研发调试",
-        href: "/production/debug",
-        role: "IT研发",
-        icon: <Cog size={14} />,
-        isMock: true,
-      },
-      {
         key: "prod_release",
-        seq: 9,
-        title: "生产级发布",
-        subtitle: "版本上线",
-        href: "/production/release",
-        role: "IT研发",
+        seq: 8,
+        title: "IT 交付（演示态）",
+        subtitle: "Demo 不展开",
+        href: "/workflow",
+        role: "FOD综管",
         icon: <Rocket size={14} />,
         isMock: true,
       },
@@ -160,8 +148,8 @@ const LANES: LaneDef[] = [
     nodes: [
       {
         key: "op_console",
-        seq: 10,
-        title: "Skill 操作中心",
+        seq: 9,
+        title: "Skill 作业中心",
         subtitle: "一线员工执行",
         href: "/operate/console",
         role: "FOD一线操作",
@@ -169,7 +157,7 @@ const LANES: LaneDef[] = [
       },
       {
         key: "op_badcase",
-        seq: 11,
+        seq: 10,
         title: "Badcase 反馈",
         subtitle: "回流知识库",
         href: "/operate/badcase",
@@ -201,19 +189,10 @@ export function WorkflowOverview() {
 
   return (
     <div className="space-y-3">
-      {/* 顶部工具条：图例 + 仅看本角色 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3 flex-wrap text-xs text-gray-500">
           <span className="font-medium text-gray-700">角色色点：</span>
-          {(
-            [
-              "FOD综管",
-              "FOD一线AI管理",
-              "FOD一线操作",
-              "IT产品",
-              "IT研发",
-            ] as FODRole[]
-          ).map((r) => {
+          {FOD_ROLES.map((r) => {
             const t = ROLE_THEME[r];
             return (
               <span key={r} className="inline-flex items-center gap-1">
@@ -245,7 +224,6 @@ export function WorkflowOverview() {
         </div>
       </div>
 
-      {/* 三条水平泳道 */}
       <div className="space-y-3">
         {LANES.map((lane) => (
           <SwimLane
@@ -261,7 +239,6 @@ export function WorkflowOverview() {
   );
 }
 
-// ──────────────────────────────────────────────
 function SwimLane({
   lane,
   stats,
@@ -310,7 +287,6 @@ function SwimLane({
   );
 }
 
-// ──────────────────────────────────────────────
 function NodeCard({
   node,
   stat,

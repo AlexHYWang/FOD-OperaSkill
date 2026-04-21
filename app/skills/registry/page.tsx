@@ -182,10 +182,7 @@ function SkillListTab({
   const [showForm, setShowForm] = useState(false);
 
   const canAdvance =
-    effectiveRole === "FOD一线AI管理" ||
-    effectiveRole === "FOD综管" ||
-    effectiveRole === "IT产品" ||
-    effectiveRole === "IT研发";
+    effectiveRole === "FOD一线AI管理" || effectiveRole === "FOD综管";
 
   const load = useCallback(async () => {
     setLoading(true);

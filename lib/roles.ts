@@ -1,30 +1,25 @@
 /**
- * 角色体系（v4）：FOD SKILL 管理全生命周期的 5 种角色
+ * 角色体系（prd_mock v2）：FOD SKILL 管理的 3 种角色（财务侧）
  *
  * 角色编码（FODRole）用于程序内部判断，对应飞书 Table3 的「角色V4」字段值。
  * 迁移兼容：老字段「角色」中的 `管理员` 自动映射为 `FOD综管`，`普通用户` 映射为 `FOD一线操作`。
+ * prd_mock 分支精简：去掉 IT产品/IT研发（Demo 不演示 IT 交付细节）。
  *
- * 角色职责（对应第二张泳道图）：
+ * 角色职责：
  *   - FOD综管        ：产品 Owner + 跨团队统筹；负责知识库整合、成员管理
  *   - FOD一线AI管理  ：各 FOD 团队的主管；负责知识库治理、Skill 训练决策
  *   - FOD一线操作    ：团队内日常成员；负责流程上报、知识库提取、评测集上传、Badcase 反馈
- *   - IT产品         ：IT 侧产品经理；负责生产级 Skill 评测介入
- *   - IT研发         ：IT 侧研发；负责生产级 Skill 调试 / 测试 / 发布
  */
 
 export type FODRole =
   | "FOD综管"
   | "FOD一线AI管理"
-  | "FOD一线操作"
-  | "IT产品"
-  | "IT研发";
+  | "FOD一线操作";
 
 export const FOD_ROLES: FODRole[] = [
   "FOD综管",
   "FOD一线AI管理",
   "FOD一线操作",
-  "IT产品",
-  "IT研发",
 ];
 
 /** 每种角色的视觉标识（tailwind 色） */
@@ -73,24 +68,6 @@ export const ROLE_THEME: Record<FODRole, RoleTheme> = {
     description: "团队成员，日常流程上报/知识库提取/Badcase 反馈",
     short: "操作",
   },
-  IT产品: {
-    dot: "bg-purple-500",
-    text: "text-purple-700",
-    bg: "bg-purple-50",
-    border: "border-purple-200",
-    glow: "rgba(168, 85, 247, 0.35)",
-    description: "IT 产品经理，生产级 Skill 评测介入",
-    short: "产品",
-  },
-  IT研发: {
-    dot: "bg-gray-500",
-    text: "text-gray-700",
-    bg: "bg-gray-100",
-    border: "border-gray-300",
-    glow: "rgba(107, 114, 128, 0.35)",
-    description: "IT 研发，生产级 Skill 调试 / 测试 / 发布",
-    short: "研发",
-  },
 };
 
 /** 老角色兼容映射：管理员 → FOD综管；普通用户 → FOD一线操作 */
@@ -122,19 +99,15 @@ export function resolveRole(
  */
 export const PAGE_VISIBILITY: Record<string, FODRole[]> = {
   "/admin": ["FOD综管"],
-  "/skills/registry": ["FOD综管", "FOD一线AI管理", "FOD一线操作", "IT产品", "IT研发"],
+  "/skills/registry": FOD_ROLES,
   // 以下所有人可看（写入权限由页面内部逻辑控制）
   "/": FOD_ROLES,
   "/section1": FOD_ROLES,
   "/section2": FOD_ROLES,
   "/dashboard": FOD_ROLES,
-  "/knowledge/extract": FOD_ROLES,
-  "/knowledge/govern": FOD_ROLES,
-  "/knowledge/consolidate": FOD_ROLES,
-  "/evaluation/dataset": FOD_ROLES,
-  "/evaluation/run": FOD_ROLES,
-  "/production/debug": FOD_ROLES,
-  "/production/release": FOD_ROLES,
+  "/knowledge": FOD_ROLES,
+  "/evaluation": FOD_ROLES,
+  "/skill-forge": FOD_ROLES,
   "/operate/console": FOD_ROLES,
   "/operate/badcase": FOD_ROLES,
 };
@@ -142,14 +115,10 @@ export const PAGE_VISIBILITY: Record<string, FODRole[]> = {
 /** 每个环节的主要负责角色（在页面顶部 Chip 展示 & 流程图卡片角色色点） */
 export const PAGE_OWNER_ROLE: Record<string, FODRole> = {
   "/section1": "FOD一线操作",
-  "/knowledge/extract": "FOD一线操作",
-  "/knowledge/govern": "FOD一线AI管理",
-  "/knowledge/consolidate": "FOD综管",
+  "/knowledge": "FOD一线AI管理",
   "/section2": "FOD一线操作",
-  "/evaluation/dataset": "FOD一线操作",
-  "/evaluation/run": "FOD一线操作",
-  "/production/debug": "IT研发",
-  "/production/release": "IT研发",
+  "/skill-forge": "FOD一线操作",
+  "/evaluation": "FOD一线AI管理",
   "/operate/console": "FOD一线操作",
   "/operate/badcase": "FOD一线操作",
   "/skills/registry": "FOD综管",
@@ -160,18 +129,10 @@ export function isAdminRole(role: FODRole | "" | undefined): boolean {
   return role === "FOD综管";
 }
 
-/** 读取 IT 侧环境变量白名单（IT_PRODUCT_OPEN_IDS / IT_DEV_OPEN_IDS） · 服务端用 */
-export function resolveITRoleByOpenId(openId: string): FODRole | "" {
-  if (!openId) return "";
-  const prodIds = (process.env.IT_PRODUCT_OPEN_IDS || "")
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
-  if (prodIds.includes(openId)) return "IT产品";
-  const devIds = (process.env.IT_DEV_OPEN_IDS || "")
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
-  if (devIds.includes(openId)) return "IT研发";
+/**
+ * 保留函数签名以兼容既有调用方（如 lib/user-profile.ts）。
+ * prd_mock 分支不展示 IT 角色，永远返回 ""。
+ */
+export function resolveITRoleByOpenId(_openId: string): FODRole | "" {
   return "";
 }

@@ -17,6 +17,10 @@
 # IDM 冒烟脚本日志
 /logs/
 
+# Python
+__pycache__/
+*.pyc
+
 # misc
 .DS_Store
 *.pem

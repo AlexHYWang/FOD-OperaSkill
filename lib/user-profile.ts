@@ -16,11 +16,7 @@ import {
   getUserDepartment,
   type BitableRecord,
 } from "@/lib/feishu";
-import {
-  resolveRole,
-  resolveITRoleByOpenId,
-  type FODRole,
-} from "@/lib/roles";
+import { resolveRole, type FODRole } from "@/lib/roles";
 
 export interface UserProfile {
   openId: string;
@@ -102,8 +98,6 @@ export async function getUserProfile(
 ): Promise<UserProfile> {
   const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
   const table3Id = process.env.FEISHU_TABLE3_ID;
-  // IT 侧白名单用户：无需在 Table3 注册也能作为 IT产品/IT研发 登录展示
-  const itRole = resolveITRoleByOpenId(openId);
 
   if (!appToken || !table3Id) {
     return {
@@ -111,10 +105,10 @@ export async function getUserProfile(
       name,
       team: "",
       role: "",
-      roleV4: itRole,
+      roleV4: "",
       isTeamLeader: false,
       department: "",
-      isBootstrapped: !!itRole,
+      isBootstrapped: false,
     };
   }
 
@@ -125,10 +119,10 @@ export async function getUserProfile(
       name,
       team: "",
       role: "",
-      roleV4: itRole,
+      roleV4: "",
       isTeamLeader: false,
       department: "",
-      isBootstrapped: !!itRole,
+      isBootstrapped: false,
     };
   }
 
@@ -142,8 +136,8 @@ export async function getUserProfile(
   const updatedAt =
     typeof updatedAtRaw === "number" ? updatedAtRaw : undefined;
 
-  // 优先取 IT 白名单（可让测试账号扮演 IT 角色），否则按 Table3 字段解析
-  const resolved = itRole || resolveRole(roleV4Raw, roleRaw, isTeamLeader);
+  // prd_mock v2：IT 白名单已禁用，统一按 Table3 字段解析
+  const resolved = resolveRole(roleV4Raw, roleRaw, isTeamLeader);
 
   return {
     openId,
@@ -160,7 +154,7 @@ export async function getUserProfile(
     department,
     recordId: record.record_id,
     updatedAt,
-    isBootstrapped: !!team || !!itRole,
+    isBootstrapped: !!team,
   };
 }
 

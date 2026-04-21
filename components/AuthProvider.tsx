@@ -232,13 +232,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const effectiveRole: FODRole | "" =
     demoMode && demoRole ? demoRole : profile.roleV4;
 
-  // 演示模式下，综管 / IT 角色（其他团队视角并不直观）需要先选角色视角
-  const needsRolePick =
-    demoMode &&
-    !demoRole &&
-    (profile.roleV4 === "FOD综管" ||
-      profile.roleV4 === "IT产品" ||
-      profile.roleV4 === "IT研发");
+  // prd_mock v2：首页是混合版门户，不再强制"选角色"跳转 → 永远 false。
+  // 演示模式下切换视角仍由顶栏 DemoRoleChipDropdown 承担。
+  const needsRolePick = false;
 
   return (
     <AuthContext.Provider

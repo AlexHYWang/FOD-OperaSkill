@@ -90,9 +90,7 @@ export function RoleWorkbench({ role }: { role: FODRole }) {
               "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5",
               role === "FOD综管" && "bg-indigo-600 hover:bg-indigo-700",
               role === "FOD一线AI管理" && "bg-teal-600 hover:bg-teal-700",
-              role === "FOD一线操作" && "bg-blue-600 hover:bg-blue-700",
-              role === "IT产品" && "bg-purple-600 hover:bg-purple-700",
-              role === "IT研发" && "bg-gray-700 hover:bg-gray-800"
+              role === "FOD一线操作" && "bg-blue-600 hover:bg-blue-700"
             )}
           >
             <Sparkles size={14} />

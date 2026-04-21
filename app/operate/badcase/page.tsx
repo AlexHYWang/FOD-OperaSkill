@@ -66,9 +66,7 @@ export default function BadcasePage() {
   const [showForm, setShowForm] = useState(Boolean(preSkill));
 
   const canHandle =
-    effectiveRole === "FOD一线AI管理" ||
-    effectiveRole === "FOD综管" ||
-    effectiveRole === "IT产品";
+    effectiveRole === "FOD一线AI管理" || effectiveRole === "FOD综管";
 
   const load = useCallback(async () => {
     setLoading(true);

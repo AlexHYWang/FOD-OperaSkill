@@ -1,12 +1,13 @@
 /**
- * 知识库条目 CRUD（Table7）
- *   GET  /api/knowledge?status=已提取&team=XXX
+ * 知识库条目 CRUD（Table7）· prd_mock v2 统一管理中心
+ *   GET  /api/knowledge?status=已提取&team=XXX&process=XXX&section=XXX&node=XXX&scene=XXX
  *   POST /api/knowledge         → 一线操作 创建条目（状态=已提取）
- *   PATCH /api/knowledge { recordId, fields, action } →
- *      治理/整合对条目状态的推进：
- *        action=govern      → 角色 FOD一线AI管理，状态 已提取 → 治理中
- *        action=consolidate → 角色 FOD综管，状态 治理中 → 已整合
- *        action=archive     → 角色 FOD综管，状态 任意 → 已归档
+ *   PATCH /api/knowledge { recordId, action } →
+ *      action=govern           → FOD一线AI管理 把 已提取 推到 治理中
+ *      action=consolidate      → FOD综管 把 治理中 推到 已整合
+ *      action=publish          → FOD综管/一线AI管理 把 治理中/已整合 推到 已发布（写版本号 + 是否当前版本=true）
+ *      action=archive          → 归档
+ *      action=revert-to-extracted → 退回
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
@@ -69,8 +70,10 @@ export interface KnowledgeItem {
   extractorNames: string[];
   governorNames: string[];
   consolidatorNames: string[];
-  status: "已提取" | "治理中" | "已整合" | "已归档" | "";
+  status: "已提取" | "治理中" | "已整合" | "已发布" | "已归档" | "";
   version: string;
+  /** 是否当前上线版本（发布后真理性字段） */
+  isCurrent: boolean;
   extractedAt: number;
   governedAt: number;
   consolidatedAt: number;
@@ -98,6 +101,10 @@ function mapRecord(r: { record_id: string; fields: Record<string, unknown> }): K
     consolidatorNames: extractPersonNames(f["整合人"]),
     status: (asString(f["状态"]) || "") as KnowledgeItem["status"],
     version: asString(f["版本号"]),
+    isCurrent:
+      f["是否当前版本"] === true ||
+      f["是否当前版本"] === 1 ||
+      f["是否当前版本"] === "true",
     extractedAt: asNumber(f["提取时间"]),
     governedAt: asNumber(f["治理时间"]),
     consolidatedAt: asNumber(f["整合时间"]),
@@ -120,12 +127,23 @@ function getTable7() {
 export async function GET(req: NextRequest) {
   try {
     const { appToken, tableId } = getTable7();
-    const status = req.nextUrl.searchParams.get("status") || "";
-    const team = req.nextUrl.searchParams.get("team") || "";
+    const sp = req.nextUrl.searchParams;
+    const status = sp.get("status") || "";
+    const team = sp.get("team") || "";
+    const process = sp.get("process") || "";
+    const section = sp.get("section") || "";
+    const node = sp.get("node") || "";
+    const scene = sp.get("scene") || "";
+    const submitter = sp.get("submitter") || "";
+    const current = sp.get("current") || "";
 
     const filters: string[] = [];
     if (status) filters.push(`CurrentValue.[状态]="${status}"`);
     if (team) filters.push(`CurrentValue.[团队名称]="${team}"`);
+    if (process) filters.push(`CurrentValue.[端到端流程]="${process}"`);
+    if (section) filters.push(`CurrentValue.[环节]="${section}"`);
+    if (node) filters.push(`CurrentValue.[节点]="${node}"`);
+    if (scene) filters.push(`CurrentValue.[关联场景名]="${scene}"`);
     const filter = filters.length
       ? filters.length === 1
         ? filters[0]
@@ -133,9 +151,15 @@ export async function GET(req: NextRequest) {
       : undefined;
 
     const all = await getAllRecords(appToken, tableId, filter);
-    const items = all
+    let items = all
       .map(mapRecord)
       .sort((a, b) => b.updatedAt - a.updatedAt);
+    if (submitter) {
+      items = items.filter((it) => it.extractorNames.includes(submitter));
+    }
+    if (current === "1") {
+      items = items.filter((it) => it.isCurrent);
+    }
     return NextResponse.json({ success: true, items });
   } catch (err) {
     console.error("[knowledge] GET 失败:", err);
@@ -170,6 +194,7 @@ export async function POST(req: NextRequest) {
       提取人: [{ id: session.user.open_id }],
       状态: "已提取",
       版本号: String(body?.version || "v1.0"),
+      是否当前版本: false,
       提取时间: now,
       更新时间: now,
       备注: String(body?.remark || ""),
@@ -221,9 +246,63 @@ export async function PATCH(req: NextRequest) {
         fields["整合人"] = [{ id: session.user.open_id }];
         fields["整合时间"] = now;
         break;
+      case "publish": {
+        // 发布：把该 process/section/node/scene 的旧当前版本置 false，新版本置 true
+        fields["状态"] = "已发布";
+        fields["整合人"] = [{ id: session.user.open_id }];
+        fields["整合时间"] = now;
+        const version = String(body?.version || "").trim();
+        if (version) fields["版本号"] = version;
+        fields["是否当前版本"] = true;
+        // 把同一 scene/node/section/process 下的其他已发布记录置 false
+        try {
+          const currentRecord = await getAllRecords(appToken, tableId).then(
+            (rs) => rs.find((r) => r.record_id === recordId)
+          );
+          if (currentRecord) {
+            const cf = currentRecord.fields;
+            const scope = {
+              process: asString(cf["端到端流程"]),
+              section: asString(cf["环节"]),
+              node: asString(cf["节点"]),
+              scene: asString(cf["关联场景名"]),
+            };
+            const filters = [
+              scope.scene && `CurrentValue.[关联场景名]="${scope.scene}"`,
+              scope.node && `CurrentValue.[节点]="${scope.node}"`,
+              scope.section && `CurrentValue.[环节]="${scope.section}"`,
+              scope.process && `CurrentValue.[端到端流程]="${scope.process}"`,
+            ].filter(Boolean) as string[];
+            const f =
+              filters.length > 1 ? `AND(${filters.join(",")})` : filters[0];
+            if (f) {
+              const peers = await getAllRecords(appToken, tableId, f);
+              await Promise.all(
+                peers
+                  .filter(
+                    (p) =>
+                      p.record_id !== recordId &&
+                      (p.fields["是否当前版本"] === true ||
+                        p.fields["是否当前版本"] === 1)
+                  )
+                  .map((p) =>
+                    updateRecord(appToken, tableId, p.record_id, {
+                      是否当前版本: false,
+                      更新时间: now,
+                    })
+                  )
+              );
+            }
+          }
+        } catch (err) {
+          console.warn("[knowledge] publish 旧版本降级失败：", err);
+        }
+        break;
+      }
       case "archive":
         fields["状态"] = "已归档";
         fields["整合人"] = [{ id: session.user.open_id }];
+        fields["是否当前版本"] = false;
         break;
       case "revert-to-extracted":
         fields["状态"] = "已提取";

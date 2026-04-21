@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutGrid,
   Zap,
   LogOut,
   User,
@@ -16,18 +15,14 @@ import {
   BarChart3,
   Home as HomeIcon,
   BookOpen,
-  GitMerge,
   FlaskConical,
-  ScrollText,
-  Hammer,
-  Rocket,
-  PlayCircle,
   Flag,
   Boxes,
   Sparkles,
   Map,
   Eye,
   EyeOff,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TeamSelector } from "@/components/TeamSelector";
@@ -75,15 +70,13 @@ const ALL: FODRole[] = [...FOD_ROLES];
 const FOD_FRONTLINE: FODRole[] = ["FOD一线操作"];
 const FOD_LEADER: FODRole[] = ["FOD一线AI管理"];
 const FOD_ADMIN: FODRole[] = ["FOD综管"];
-const IT: FODRole[] = ["IT产品", "IT研发"];
 
 /**
- * 过滤矩阵（与 plan 对齐）：
- *   FOD一线操作     : 首页、全景、流程梳理、知识提取、Skill训练、操作中心、Badcase
- *   FOD一线AI管理   : 上面 + 知识治理、评测集、评测执行、注册中心、看板
- *   FOD综管         : 全部
- *   IT产品          : 首页、全景、评测执行、生产级调试、生产级发布、注册中心、看板
- *   IT研发          : 首页、全景、生产级调试、生产级发布、看板
+ * prd_mock v2 导航：4 板块
+ *   概览：我的工作台 / 全景 / 全链路看板 / Skill 注册 / 作业中心 / Badcase
+ *   知识库管理：统一管理中心 /knowledge
+ *   评测集管理：统一管理中心 /evaluation
+ *   打磨 Skill 平台：/skill-forge（OpenClaw Mock）
  */
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -109,107 +102,73 @@ const NAV_GROUPS: NavGroup[] = [
         label: "全链路看板",
         sublabel: "各阶段 Skill 数量 · 卡点",
         icon: <BarChart3 size={16} />,
-        roles: [...FOD_LEADER, ...FOD_ADMIN, ...IT],
+        roles: [...FOD_LEADER, ...FOD_ADMIN],
       },
       {
         href: "/skills/registry",
         label: "Skill 注册中心",
         sublabel: "全生命周期 · 成员管理",
         icon: <Boxes size={16} />,
-        roles: [...FOD_LEADER, ...FOD_ADMIN, ...IT],
+        roles: ALL,
       },
-    ],
-    defaultOpen: true,
-  },
-  {
-    id: "step1",
-    title: "Step 1 · Skill 调试阶段",
-    subtitle: "从流程上报到生产级发布",
-    items: [
-      {
-        href: "/section1",
-        label: "1. 流程梳理",
-        sublabel: "任务级场景清单",
-        icon: <LayoutGrid size={16} />,
-        roles: [...FOD_FRONTLINE, ...FOD_LEADER, ...FOD_ADMIN],
-      },
-      {
-        href: "/knowledge/extract",
-        label: "2. 知识库 · 提取",
-        sublabel: "一线操作上传素材",
-        icon: <BookOpen size={16} />,
-        roles: [...FOD_FRONTLINE, ...FOD_LEADER, ...FOD_ADMIN],
-      },
-      {
-        href: "/knowledge/govern",
-        label: "3. 知识库 · 治理",
-        sublabel: "主管审核 / 整理",
-        icon: <GitMerge size={16} />,
-        roles: [...FOD_LEADER, ...FOD_ADMIN],
-      },
-      {
-        href: "/knowledge/consolidate",
-        label: "4. 知识库 · 整合",
-        sublabel: "综管归档 + 下发",
-        icon: <ScrollText size={16} />,
-        roles: [...FOD_ADMIN],
-      },
-      {
-        href: "/section2",
-        label: "5. Skill 训练（财务）",
-        sublabel: "4 步打磨 → 准确率闭环",
-        icon: <Hammer size={16} />,
-        roles: [...FOD_FRONTLINE, ...FOD_LEADER, ...FOD_ADMIN],
-      },
-      {
-        href: "/evaluation/dataset",
-        label: "6. 评测集管理",
-        sublabel: "题库上传 / 版本",
-        icon: <FlaskConical size={16} />,
-        roles: [...FOD_LEADER, ...FOD_ADMIN],
-      },
-      {
-        href: "/evaluation/run",
-        label: "7. 评测执行",
-        sublabel: "批跑 · 准确率记录",
-        icon: <PlayCircle size={16} />,
-        roles: [...FOD_LEADER, ...FOD_ADMIN, ...IT],
-      },
-      {
-        href: "/production/debug",
-        label: "8. 生产级调试（IT）",
-        sublabel: "研发侧调试 · 演示态",
-        icon: <Hammer size={16} />,
-        roles: [...FOD_ADMIN, ...IT],
-      },
-      {
-        href: "/production/release",
-        label: "9. 生产级发布（IT）",
-        sublabel: "版本上线 · 演示态",
-        icon: <Rocket size={16} />,
-        roles: [...FOD_ADMIN, ...IT],
-      },
-    ],
-    defaultOpen: true,
-  },
-  {
-    id: "step2",
-    title: "Step 2 · Skill 使用阶段",
-    subtitle: "日常使用与 Badcase 回流",
-    items: [
       {
         href: "/operate/console",
-        label: "10. Skill 操作中心",
-        sublabel: "一线员工执行",
+        label: "Skill 作业中心",
+        sublabel: "Step2 · 日常使用",
         icon: <Sparkles size={16} />,
         roles: [...FOD_FRONTLINE, ...FOD_LEADER, ...FOD_ADMIN],
       },
       {
         href: "/operate/badcase",
-        label: "11. Badcase 反馈",
+        label: "Badcase 反馈",
         sublabel: "回流知识库 · 闭环",
         icon: <Flag size={16} />,
-        roles: [...FOD_FRONTLINE, ...FOD_LEADER, ...FOD_ADMIN, ...IT],
+        roles: ALL,
+      },
+    ],
+    defaultOpen: true,
+  },
+  {
+    id: "kb",
+    title: "知识库管理",
+    subtitle: "统一审核 / 发布 / 版本",
+    items: [
+      {
+        href: "/knowledge",
+        label: "知识库管理中心",
+        sublabel: "提交 · 审核 · 发布 · 版本",
+        icon: <BookOpen size={16} />,
+        roles: ALL,
+      },
+    ],
+    defaultOpen: true,
+  },
+  {
+    id: "eval",
+    title: "评测集管理",
+    subtitle: "数据快照 + 标准答案",
+    items: [
+      {
+        href: "/evaluation",
+        label: "评测集管理中心",
+        sublabel: "快照 / 答案 / 评测运行",
+        icon: <FlaskConical size={16} />,
+        roles: ALL,
+      },
+    ],
+    defaultOpen: true,
+  },
+  {
+    id: "forge",
+    title: "打磨 Skill 平台",
+    subtitle: "OpenClaw 云 Agent",
+    items: [
+      {
+        href: "/skill-forge",
+        label: "打磨 Skill 平台",
+        sublabel: "4 步向导 · 生成子 Skill",
+        icon: <Wand2 size={16} />,
+        roles: ALL,
       },
     ],
     defaultOpen: true,
@@ -491,13 +450,10 @@ export function AppLayout({
 
   // 过滤策略：
   // - 一线角色（FOD一线操作 / FOD一线AI管理）：总是按角色过滤
-  // - 综管 / IT：默认显示全部；勾选「仅看我的」后按角色过滤
+  // - 综管：默认显示全部；勾选「仅看我的」后按角色过滤
   const isFrontline =
     effectiveRole === "FOD一线操作" || effectiveRole === "FOD一线AI管理";
-  const canToggleOnlyMine =
-    effectiveRole === "FOD综管" ||
-    effectiveRole === "IT产品" ||
-    effectiveRole === "IT研发";
+  const canToggleOnlyMine = effectiveRole === "FOD综管";
   const filterRoles: FODRole | null = effectiveRole
     ? isFrontline
       ? effectiveRole

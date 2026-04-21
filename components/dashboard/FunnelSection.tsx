@@ -57,16 +57,10 @@ const FUNNEL_STAGES: Array<{
     owner: "FOD一线AI管理",
   },
   {
-    key: "prod_debug",
-    label: "生产级调试",
-    sub: "IT 侧对接真实数据链路（Mock 展示）",
-    owner: "IT研发",
-  },
-  {
     key: "prod_release",
     label: "Skill 发布",
-    sub: "正式上线到 FOD 工作台（Table8 已发布）",
-    owner: "IT产品",
+    sub: "正式上线到 FOD 工作台（演示态 · 由综管把关）",
+    owner: "FOD综管",
   },
   {
     key: "op_console",

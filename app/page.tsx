@@ -5,19 +5,12 @@ import { LogIn, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/components/AuthProvider";
-import { RoleWorkbench } from "@/components/RoleWorkbench";
-import { RoleSelectScreen } from "@/components/RoleSelectScreen";
+import { HomeKpiStrip } from "@/components/home/HomeKpiStrip";
+import { HomeStepCards } from "@/components/home/HomeStepCards";
+import { MyActivityPanel } from "@/components/home/MyActivityPanel";
 
 export default function HomePage() {
-  const {
-    user,
-    isLoggedIn,
-    loading,
-    team,
-    setTeam,
-    effectiveRole,
-    needsRolePick,
-  } = useAuth();
+  const { user, isLoggedIn, loading, team, setTeam, effectiveRole } = useAuth();
 
   if (loading) {
     return (
@@ -33,40 +26,15 @@ export default function HomePage() {
 
   return (
     <AppLayout team={team} onTeamChange={setTeam} user={user}>
-      <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
-        {needsRolePick ? (
-          <RoleSelectScreen />
-        ) : effectiveRole ? (
-          <RoleWorkbench role={effectiveRole} />
-        ) : (
-          <NoRoleFallback />
-        )}
+      <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
+        <HomeKpiStrip role={effectiveRole} />
+        <HomeStepCards />
+        <MyActivityPanel />
       </div>
     </AppLayout>
   );
 }
 
-function NoRoleFallback() {
-  return (
-    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
-      <div className="text-sm font-semibold text-amber-800 mb-1.5">
-        暂未分配角色
-      </div>
-      <p className="text-xs text-amber-700 leading-relaxed mb-3">
-        你的账号在 FOD 成员表里还没分配「角色 V4」。请联系综管或稍后再试，
-        也可先查看只读的全景流程图。
-      </p>
-      <Link
-        href="/workflow"
-        className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:underline"
-      >
-        → 查看全景流程图
-      </Link>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────
 function UnauthenticatedLanding() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -100,10 +68,8 @@ function UnauthenticatedLanding() {
           </span>
         </h1>
         <p className="text-base text-gray-600 max-w-2xl mx-auto leading-relaxed">
-          Step1 调试：流程梳理 → 知识库提取/治理/整合 → Skill 训练 →
-          评测 → 生产级发布。
-          <br />
-          Step2 使用：Skill 操作中心 → Badcase 反馈回流。
+          STEP1 资料沉淀：知识库管理 · STEP2 质量标杆：评测集管理 · STEP3
+          打磨生成：打磨 Skill 平台 · STEP4 日常作业：Skill 作业中心
         </p>
         <div className="mt-8">
           <Button
@@ -114,6 +80,14 @@ function UnauthenticatedLanding() {
             <LogIn size={18} />
             用飞书账号登录查看全流程
           </Button>
+        </div>
+        <div className="mt-6">
+          <Link
+            href="/workflow"
+            className="text-sm text-blue-600 hover:text-blue-700"
+          >
+            也可先查看只读的全景流程图 →
+          </Link>
         </div>
       </section>
       <footer className="max-w-6xl mx-auto px-6 pb-10 text-center text-xs text-gray-400">
