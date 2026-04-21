@@ -6,6 +6,8 @@ export interface SessionData {
     open_id: string;
     name: string;
     avatar_url?: string;
+    /** 飞书邮箱，用于推导 IDM userName（@ 前缀）；需 OAuth scope 含 contact:user.email:readonly */
+    email?: string;
   };
   isLoggedIn: boolean;
 }

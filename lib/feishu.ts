@@ -114,7 +114,8 @@ export function getOAuthUrl(redirectUri: string, state: string): string {
     client_id: process.env.FEISHU_APP_ID!,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: "contact:user.base:readonly",
+    scope:
+      "contact:user.base:readonly contact:user.email:readonly",
     state,
   });
   return `https://open.feishu.cn/open-apis/authen/v1/index?${params}`;
@@ -183,6 +184,21 @@ export async function createTable(
   const data = await res.json();
   if (data.code !== 0) throw new Error(`创建数据表失败: ${data.msg}`);
   return data.data.table_id as string;
+}
+
+/**
+ * 幂等创建数据表：按表名查找；命中则返回其 table_id，否则创建新表
+ * 返回 { tableId, created }：created=true 表示新建
+ */
+export async function ensureTable(
+  appToken: string,
+  tableName: string
+): Promise<{ tableId: string; created: boolean }> {
+  const existing = await listTables(appToken);
+  const hit = existing.find((t) => t.name === tableName);
+  if (hit) return { tableId: hit.table_id, created: false };
+  const tableId = await createTable(appToken, tableName);
+  return { tableId, created: true };
 }
 
 export async function createField(

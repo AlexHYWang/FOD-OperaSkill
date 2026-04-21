@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
     client_id: process.env.FEISHU_APP_ID!,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: "contact:user.base:readonly",
+    scope:
+      "contact:user.base:readonly contact:user.email:readonly",
     state,
   });
 

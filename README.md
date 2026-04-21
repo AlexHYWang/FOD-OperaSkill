@@ -64,6 +64,17 @@ FEISHU_DRIVE_FOLDER_TOKEN=your_folder_token
 FEISHU_BITABLE_APP_TOKEN=
 FEISHU_TABLE1_ID=
 FEISHU_TABLE2_ID=
+FEISHU_TABLE3_ID=
+# 看板表（init-dashboard 后填入）
+FEISHU_TABLE4_ID=
+FEISHU_TABLE5_ID=
+FEISHU_TABLE6_ID=
+# 全生命周期 v4（migrate-v4 后填入）
+FEISHU_TABLE7_ID=
+FEISHU_TABLE8_ID=
+FEISHU_TABLE9_ID=
+FEISHU_TABLE10_ID=
+FEISHU_TABLE11_ID=
 
 # Session 密钥（至少32位）
 SESSION_SECRET=your_random_secret_key_min_32_chars
@@ -92,6 +103,24 @@ npm run dev
 ```
 
 访问 http://localhost:3000
+
+### 端口 3000 已被占用（Windows）
+
+若启动时出现 `Port 3000 is in use, trying 3001 instead`，说明本机已有进程占用 3000。可在 **PowerShell** 中执行下面一条命令，结束当前占用 **3000** 且处于 **Listen** 状态的进程（通常为先前未关掉的 `node` / `next dev`）：
+
+```powershell
+Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+```
+
+执行后再运行 `npm run dev`。若仍提示占用，可用 `Get-NetTCPConnection -LocalPort 3000` 查看是否仍有监听，或改用管理员 PowerShell 重试。
+
+**手动排查（可选）**：先查 PID，再强制结束。
+
+```powershell
+netstat -ano | findstr :3000
+# 记下最后一列 PID，例如 12345
+taskkill /PID 12345 /F
+```
 
 ## 部署到 Vercel
 
@@ -130,6 +159,18 @@ npm run dev
 团队名称 · 目标标题（沿用原「目标内容」） · 提交日期
 · **关联类型**（v2：`任务步骤`/`环节节点`/`自由文本`）
 · **端到端流程** · **环节** · **节点** · **关联任务名** · **步骤编号列表**
+
+### 表7～11：v4 全生命周期（`migrate-v4` 创建）
+
+| 环境变量 | 表名 | 用途概要 |
+|----------|------|----------|
+| `FEISHU_TABLE7_ID` | 知识库条目 | 提取 / 治理 / 整合状态流转 |
+| `FEISHU_TABLE8_ID` | Skill 注册表 | Skill 名称、版本、状态（训练中→已发布等） |
+| `FEISHU_TABLE9_ID` | 评测集 | 评测集元数据与文件链接 |
+| `FEISHU_TABLE10_ID` | 评测记录 | 单次评测结果与准确率 |
+| `FEISHU_TABLE11_ID` | Badcase 反馈 | 一线反馈与回流知识库 |
+
+表3 在 v4 中还会扩展 **`角色V4`**、**`是否团队主管`** 等字段（详见下方 v4 升级指南）。
 
 ---
 
@@ -211,3 +252,46 @@ v3 把原先含糊的「任务一 / 任务二 / 日常任务」统一换成「**
    - 「梳理场景」里能看到旧数据
    - 「打磨 Skill」里选场景、上传资料能成功写回
    - 看板下钻不再为空
+
+---
+
+## v4 升级指南 · SKILL 管理工作流原型（多维表 Table7～11）
+
+产品级说明、角色划分、页面清单与演示模式等，以仓库内计划为准：
+
+- **计划文档（勿删改文件名）**：[`skill管理工作流原型设计_68f6695a.plan.md`](.cursor/plans/skill管理工作流原型设计_68f6695a.plan.md)  
+  本机绝对路径示例：`D:\Micode\FOD_OperaSkill\.cursor\plans\skill管理工作流原型设计_68f6695a.plan.md`
+
+### 前置条件
+
+- 已完成上文 **「### 3. 初始化飞书多维表格」** 中的 `POST /api/bitable/init`（或等价配置），`.env.local` 中已有 `FEISHU_BITABLE_APP_TOKEN`、`FEISHU_TABLE1_ID`～`FEISHU_TABLE3_ID`。
+- 本地开发服务已启动且能访问 **你期望的端口**（默认 `http://localhost:3000`）。若 3000 被占用，可先按上文 **「端口 3000 已被占用（Windows）」** 一节释放端口。
+
+### 执行 v4 迁移（幂等、可重复执行）
+
+在开发服务已启动的前提下，另开一个终端执行：
+
+```bash
+curl -X POST http://localhost:3000/api/bitable/migrate-v4
+```
+
+接口会：
+
+- 在 **Table3** 上确保存在 **`角色V4`**、**`是否团队主管`**，并按老字段 **`角色`** 回填 v4 角色（管理员→综管、普通用户→一线操作等）。
+- **新建或复用** 飞书内名为「知识库条目」「Skill注册表」「评测集」「评测记录」「Badcase反馈」的五张数据表，并补齐字段。
+
+响应体中的 **`envToAdd`** 会给出 `FEISHU_TABLE7_ID`～`FEISHU_TABLE11_ID`。请将其**追加或更新**到 `.env.local`，然后**重启** `npm run dev`（Next.js 仅在进程启动时读取环境变量）。
+
+### 与本仓库前端的对应关系（摘要）
+
+| 能力 | 路径或接口 |
+|------|------------|
+| 流程总览大图 | `/` |
+| 知识库 | `/knowledge/extract`、`/govern`、`/consolidate` |
+| 评测 | `/evaluation/dataset`、`/evaluation/run` |
+| 生产级演示（Mock） | `/production/debug`、`/production/release` |
+| 使用与反馈 | `/operate/console`、`/operate/badcase` |
+| Skill 注册与综管成员指派 | `/skills/registry`（成员管理 Tab 仅综管可见） |
+| 全链路漏斗看板 | `/dashboard` →「全链路流转漏斗」Tab |
+
+更多字段级定义、Mock 策略与飞书表结构，以计划文档第四节、第五节为准。

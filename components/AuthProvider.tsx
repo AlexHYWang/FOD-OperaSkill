@@ -9,6 +9,7 @@ import {
   ReactNode,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import type { FODRole } from "@/lib/roles";
 
 /** 已从多维表/下拉中移除的旧团队名，本地缓存命中则清空（不影响「新增团队」自定义名称） */
 const STALE_SAVED_TEAMS = new Set(["互联网PTP团队"]);
@@ -28,11 +29,14 @@ interface UserInfo {
   open_id: string;
   name: string;
   avatar_url?: string;
+  email?: string;
 }
 
 export interface UserProfileClient {
   team: string; // 归属团队（不可随意改）
   role: "管理员" | "普通用户" | "";
+  roleV4: FODRole | "";
+  isTeamLeader: boolean;
   department: string;
   isBootstrapped: boolean;
 }
@@ -51,11 +55,24 @@ interface AuthContextType {
   canEdit: boolean;
   /** 重新拉取 profile（onboarding 成功后调用） */
   refreshProfile: () => Promise<void>;
+
+  /** 演示模式开关 —— 开启时首页/各页展示 Mock 数据，且允许切换角色视角 */
+  demoMode: boolean;
+  setDemoMode: (v: boolean) => void;
+  /** 演示视角（仅演示模式下生效）—— 优先于真实 roleV4 */
+  demoRole: FODRole | null;
+  setDemoRole: (r: FODRole | null) => void;
+  /** 前端统一通过 effectiveRole 判断当前角色，自动融合真实/演示 */
+  effectiveRole: FODRole | "";
+  /** 演示模式 + 综管/IT + 还没选演示角色 —— 首页应展示"角色选择屏" */
+  needsRolePick: boolean;
 }
 
 const DEFAULT_PROFILE: UserProfileClient = {
   team: "",
   role: "",
+  roleV4: "",
+  isTeamLeader: false,
   department: "",
   isBootstrapped: false,
 };
@@ -70,6 +87,12 @@ const AuthContext = createContext<AuthContextType>({
   profileLoading: true,
   canEdit: false,
   refreshProfile: async () => {},
+  demoMode: false,
+  setDemoMode: () => {},
+  demoRole: null,
+  setDemoRole: () => {},
+  effectiveRole: "",
+  needsRolePick: false,
 });
 
 export function useAuth() {
@@ -79,6 +102,9 @@ export function useAuth() {
 /** 无需登录即可访问的页面 */
 const PUBLIC_PATHS = new Set(["/", "/onboarding"]);
 
+const DEMO_MODE_KEY = "fod-demo-mode";
+const DEMO_ROLE_KEY = "fod-demo-role";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -86,6 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [team, setTeamState] = useState<string>("");
   const [profile, setProfile] = useState<UserProfileClient>(DEFAULT_PROFILE);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [demoMode, setDemoModeState] = useState(false);
+  const [demoRole, setDemoRoleState] = useState<FODRole | null>(null);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -93,6 +121,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const v = readValidTeamFromStorage();
     if (v) setTeamState(v);
+    if (typeof window !== "undefined") {
+      setDemoModeState(localStorage.getItem(DEMO_MODE_KEY) === "1");
+      const dr = localStorage.getItem(DEMO_ROLE_KEY) as FODRole | null;
+      if (dr) setDemoRoleState(dr);
+    }
   }, []);
 
   useEffect(() => {
@@ -122,11 +155,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const p: UserProfileClient = {
           team: d.profile.team || "",
           role: d.profile.role || "",
+          roleV4: d.profile.roleV4 || "",
+          isTeamLeader: !!d.profile.isTeamLeader,
           department: d.profile.department || "",
           isBootstrapped: !!d.profile.isBootstrapped,
         };
         setProfile(p);
-        // 初次加载：默认把"查看团队"同步为归属团队
         if (p.team && !team) {
           setTeamState(p.team);
           if (typeof window !== "undefined") {
@@ -148,15 +182,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchProfile();
   }, [isLoggedIn, fetchProfile]);
 
-  // 登录后未选归属团队，强制跳转 /onboarding
   useEffect(() => {
     if (loading || profileLoading) return;
     if (!isLoggedIn) return;
     if (profile.isBootstrapped) return;
     if (pathname === "/onboarding") return;
-    // 其它任何页面都强引导
     router.replace("/onboarding");
-  }, [loading, profileLoading, isLoggedIn, profile.isBootstrapped, pathname, router]);
+  }, [
+    loading,
+    profileLoading,
+    isLoggedIn,
+    profile.isBootstrapped,
+    pathname,
+    router,
+  ]);
 
   const setTeam = (t: string) => {
     setTeamState(t);
@@ -167,6 +206,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const canEdit =
     !!profile.isBootstrapped && !!team && profile.team === team;
+
+  const setDemoMode = useCallback((v: boolean) => {
+    setDemoModeState(v);
+    if (typeof window !== "undefined") {
+      if (v) localStorage.setItem(DEMO_MODE_KEY, "1");
+      else localStorage.removeItem(DEMO_MODE_KEY);
+    }
+    if (!v) {
+      setDemoRoleState(null);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(DEMO_ROLE_KEY);
+      }
+    }
+  }, []);
+
+  const setDemoRole = useCallback((r: FODRole | null) => {
+    setDemoRoleState(r);
+    if (typeof window !== "undefined") {
+      if (r) localStorage.setItem(DEMO_ROLE_KEY, r);
+      else localStorage.removeItem(DEMO_ROLE_KEY);
+    }
+  }, []);
+
+  const effectiveRole: FODRole | "" =
+    demoMode && demoRole ? demoRole : profile.roleV4;
+
+  // 演示模式下，综管 / IT 角色（其他团队视角并不直观）需要先选角色视角
+  const needsRolePick =
+    demoMode &&
+    !demoRole &&
+    (profile.roleV4 === "FOD综管" ||
+      profile.roleV4 === "IT产品" ||
+      profile.roleV4 === "IT研发");
 
   return (
     <AuthContext.Provider
@@ -180,6 +252,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profileLoading,
         canEdit,
         refreshProfile: fetchProfile,
+        demoMode,
+        setDemoMode,
+        demoRole,
+        setDemoRole,
+        effectiveRole,
+        needsRolePick,
       }}
     >
       {children}

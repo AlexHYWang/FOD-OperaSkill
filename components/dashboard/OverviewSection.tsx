@@ -19,6 +19,7 @@ interface UserInfo {
   open_id: string;
   name: string;
   avatar_url?: string;
+  email?: string;
 }
 
 interface TeamProcessStats {

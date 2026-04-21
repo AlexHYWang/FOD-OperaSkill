@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
       open_id: userInfo.open_id,
       name: userInfo.name,
       avatar_url: userInfo.avatar_url,
+      email: userInfo.email || undefined,
     };
     await session.save();
 

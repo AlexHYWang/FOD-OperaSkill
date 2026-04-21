@@ -7,13 +7,21 @@ import { AppLayout } from "@/components/AppLayout";
 import { OverviewSection } from "@/components/dashboard/OverviewSection";
 import { OutputsAccuracySection } from "@/components/dashboard/OutputsAccuracySection";
 import { BlockersGoalsSection } from "@/components/dashboard/BlockersGoalsSection";
+import { FunnelSection } from "@/components/dashboard/FunnelSection";
 import { cn } from "@/lib/utils";
-import { BarChart3, FileText, AlertTriangle, Target } from "lucide-react";
+import {
+  BarChart3,
+  FileText,
+  AlertTriangle,
+  Target,
+  TrendingDown,
+} from "lucide-react";
 
-type TabId = "overview" | "outputs" | "blockers" | "goals";
+type TabId = "overview" | "funnel" | "outputs" | "blockers" | "goals";
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
   { id: "overview", label: "整体数据概览", icon: <BarChart3 size={15} /> },
+  { id: "funnel", label: "全链路流转漏斗", icon: <TrendingDown size={15} /> },
   { id: "outputs", label: "产出物 & 准确率", icon: <FileText size={15} /> },
   { id: "blockers", label: "主要卡点", icon: <AlertTriangle size={15} /> },
   { id: "goals", label: "明日关键目标", icon: <Target size={15} /> },
@@ -110,6 +118,7 @@ export default function DashboardPage() {
           {activeTab === "overview" && (
             <OverviewSection team={team} isAdmin={isAdmin} user={user} />
           )}
+          {activeTab === "funnel" && <FunnelSection team={team} />}
           {activeTab === "outputs" && (
             <OutputsAccuracySection team={team} isAdmin={isAdmin} />
           )}
