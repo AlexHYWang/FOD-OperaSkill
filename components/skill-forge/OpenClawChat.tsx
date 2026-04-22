@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, User as UserIcon, Loader2, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bot, User as UserIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ChatMessage {
@@ -46,11 +46,10 @@ interface Props {
 }
 
 /**
- * 脚本化 OpenClaw 对话面板（演示态 · Mock）
- * 所有消息按预设脚本滴出，配合进度条强化"AI 自动化"观感。
+ * 脚本化对话面板（演示态）：多轮 playbook 切换时会复位 step / finishedRef，避免卡在第三轮。
  */
 export function OpenClawChat({
-  title = "OpenClaw · 云 Agent",
+  title = "助手对话",
   playbook,
   autoplay = true,
   onFinish,
@@ -65,16 +64,27 @@ export function OpenClawChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const finishedRef = useRef(false);
 
+  const playbookDigest = useMemo(() => JSON.stringify(playbook), [playbook]);
+
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight + 100;
     }
   }, []);
 
+  // 新脚本开始时复位，避免上一轮 step>=length 与 finishedRef 导致下一轮不播 / onFinish 不触发
+  useEffect(() => {
+    finishedRef.current = false;
+    setStep(0);
+    setMessages([]);
+    setTyping(false);
+    setProgress(null);
+  }, [playbookDigest]);
+
   useEffect(() => {
     if (!autoplay) return;
     if (step >= playbook.length) {
-      if (!finishedRef.current) {
+      if (playbook.length > 0 && !finishedRef.current) {
         finishedRef.current = true;
         onFinish?.();
       }
@@ -166,14 +176,11 @@ export function OpenClawChat({
         <div className="h-7 w-7 rounded-full bg-indigo-600 text-white flex items-center justify-center">
           <Bot size={14} />
         </div>
-        <div className="flex-1">
-          <div className="text-sm font-bold text-gray-900">{title}</div>
-          <div className="text-[10.5px] text-gray-500">
-            演示态 · 脚本化回放 · 结果固化到 Bitable
-          </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold text-gray-900 truncate">{title}</div>
         </div>
-        <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-indigo-600 text-white font-semibold inline-flex items-center gap-1">
-          <Sparkles size={10} /> Mock Agent
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
+          演示
         </span>
       </div>
       <div ref={scrollRef} className="flex-1 overflow-auto p-3 space-y-3">
@@ -218,7 +225,7 @@ export function OpenClawChat({
       {userInputEnabled && (
         <div className="px-3 py-2 border-t bg-white">
           <div className="text-[10.5px] text-gray-400">
-            演示态屏蔽自由输入，请跟随 AI 脚本推进。
+            演示态屏蔽自由输入，请跟随脚本推进。
           </div>
         </div>
       )}

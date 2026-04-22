@@ -67,7 +67,7 @@ export const ROLE_WORKBENCH: Record<FODRole, RoleWorkbenchConfig> = {
       },
       {
         label: "评测集管理",
-        subtitle: "数据快照 + 标准答案",
+        subtitle: "评测数据源 + 标准答案",
         href: "/evaluation",
       },
       {
@@ -120,7 +120,7 @@ export const ROLE_WORKBENCH: Record<FODRole, RoleWorkbenchConfig> = {
       },
       {
         label: "2. 评测准备",
-        subtitle: "快照 + 标准答案",
+        subtitle: "评测数据源 + 标准答案",
         href: "/evaluation",
       },
       {

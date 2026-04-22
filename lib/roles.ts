@@ -99,7 +99,6 @@ export function resolveRole(
  */
 export const PAGE_VISIBILITY: Record<string, FODRole[]> = {
   "/admin": ["FOD综管"],
-  "/skills/registry": FOD_ROLES,
   // 以下所有人可看（写入权限由页面内部逻辑控制）
   "/": FOD_ROLES,
   "/section1": FOD_ROLES,
@@ -108,8 +107,6 @@ export const PAGE_VISIBILITY: Record<string, FODRole[]> = {
   "/knowledge": FOD_ROLES,
   "/evaluation": FOD_ROLES,
   "/skill-forge": FOD_ROLES,
-  "/operate/console": FOD_ROLES,
-  "/operate/badcase": FOD_ROLES,
 };
 
 /** 每个环节的主要负责角色（在页面顶部 Chip 展示 & 流程图卡片角色色点） */
@@ -119,9 +116,6 @@ export const PAGE_OWNER_ROLE: Record<string, FODRole> = {
   "/section2": "FOD一线操作",
   "/skill-forge": "FOD一线操作",
   "/evaluation": "FOD一线AI管理",
-  "/operate/console": "FOD一线操作",
-  "/operate/badcase": "FOD一线操作",
-  "/skills/registry": "FOD综管",
   "/dashboard": "FOD综管",
 };
 

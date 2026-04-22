@@ -113,7 +113,7 @@ const LANES: LaneDef[] = [
         key: "eval_dataset",
         seq: 6,
         title: "评测集管理",
-        subtitle: "数据快照 + 标准答案",
+        subtitle: "评测数据源 + 标准答案",
         href: "/evaluation",
         role: "FOD一线AI管理",
         icon: <FlaskConical size={14} />,

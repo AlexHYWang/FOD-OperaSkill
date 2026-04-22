@@ -1,11 +1,11 @@
 /**
- * 数据快照（评测集 · Table9）CRUD · prd_mock v2
+ * 评测数据源（评测集 · Table9）CRUD · prd_mock v2
  *   GET  /api/evaluation/datasets?team=XXX&skillName=XXX&scene=XXX
- *   POST /api/evaluation/datasets  新增数据快照
+ *   POST /api/evaluation/datasets  新增评测数据源
  *
- * prd_mock v2 语义升级：评测集 = 「数据快照」+「人工标准答案」
- *   - 本 API 管理「数据快照」，快照为唯一真相源（输入载荷/返回结果固化）
- *   - 「人工标准答案」见 /api/evaluation/answers（支持 1 快照对 N 答案）
+ * prd_mock v2：评测集 = 「评测数据源」+「人工标准答案」
+ *   - 本 API 管理数据源记录（输入载荷/返回结果等；飞书列名仍含「快照」等历史字段）
+ *   - 「人工标准答案」见 /api/evaluation/answers（支持 1 数据源对 N 答案）
  *
  * 扩展字段（Table9 软兼容：未建字段时仍能 GET / POST，只是该字段为空）：
  *   - 来源类型         single_select（MCP线上抽样 / 离线上传）
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     if (!name) {
       return NextResponse.json(
-        { error: "数据快照名称不能为空" },
+        { error: "数据源名称不能为空" },
         { status: 400 }
       );
     }

@@ -144,18 +144,14 @@ export default function EvaluationPage() {
   return (
     <AppLayout team={team} onTeamChange={setTeam} user={user}>
       <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
-        <PageHeader
-          title="评测集管理"
-          subtitle="数据快照 + 人工标准答案 · 绑定 Skill · 支持 MCP 线上抽样（演示态）"
-          icon={<FlaskConical size={18} />}
-        />
+        <PageHeader title="评测集管理" icon={<FlaskConical size={18} />} />
 
         {/* 汇总看板 */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <SummaryCard
-            title="数据快照"
+            title="评测数据源"
             value={summary.totalSnap}
-            hint="MCP / 离线 已固化"
+            hint="线上 MCP / 离线上传"
             tone="blue"
             icon={<Radio size={14} />}
           />
@@ -169,14 +165,14 @@ export default function EvaluationPage() {
           <SummaryCard
             title="完整评测用例"
             value={summary.paired}
-            hint="快照 + 采纳答案"
+            hint="数据源 + 已采纳答案"
             tone="emerald"
             icon={<Target size={14} />}
           />
           <SummaryCard
             title="配对覆盖率"
             value={`${summary.pairingRate}%`}
-            hint="配对 / 总快照"
+            hint="已配对 / 总数据源"
             tone="purple"
             icon={<CheckCircle2 size={14} />}
           />
@@ -187,14 +183,14 @@ export default function EvaluationPage() {
           <div className="flex border-b">
             <TabButton
               active={tab === "snapshots"}
-              label="数据快照"
-              desc="MCP 抽样 / 离线上传"
+              label="数据源"
+              desc="离线上传 + 线上 MCP（演示）"
               onClick={() => setTab("snapshots")}
             />
             <TabButton
               active={tab === "answers"}
-              label="人工标准答案"
-              desc="1 快照可对 N 答案 · 采纳 1 条"
+              label="标准答案（人工）"
+              desc="同一数据源可多条 · 采纳 1 条"
               onClick={() => setTab("answers")}
             />
             <TabButton
@@ -351,19 +347,19 @@ function SnapshotPane({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="text-[11px] text-gray-500">
-          数据快照固化 = 输入载荷 + 返回结果 + 时间点，保持可复现；标准答案在下一 Tab 绑定。
+          固定「查询条件 + 系统返回结果」便于复现评测；标准答案在下一 Tab 绑定。
         </div>
         <Button
           size="sm"
           onClick={onNew}
           className="bg-blue-600 hover:bg-blue-700 gap-1"
         >
-          <Plus size={14} /> 新建数据快照
+          <Plus size={14} /> 新建数据源
         </Button>
       </div>
       {snapshots.length === 0 ? (
         <div className="py-10 text-center text-sm text-gray-400">
-          暂无数据快照，点击右上角「新建」或「从线上 MCP 抽样」开始
+          暂无评测数据源，点击「新建」或先在弹窗内做「线上 MCP 抽样」
         </div>
       ) : (
         <div className="space-y-2">
@@ -444,7 +440,7 @@ function SnapshotPane({
                   )}
                   {(s.inputPayload || s.outputPayload) && (
                     <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
-                      <FileJson size={11} /> 载荷已固化
+                      <FileJson size={11} /> 已固定查询与返回
                     </span>
                   )}
                   <div className="flex-1" />
@@ -498,7 +494,7 @@ function AnswerPane({
           onChange={(e) => setActiveSnapshotId(e.target.value)}
           className="rounded border px-2 py-1 text-xs min-w-[180px]"
         >
-          <option value="">全部快照</option>
+          <option value="">全部数据源</option>
           {snapshots.map((s) => (
             <option key={s.recordId} value={s.recordId}>
               {s.name}
@@ -507,7 +503,7 @@ function AnswerPane({
         </select>
         <div className="text-[11px] text-gray-500">
           {activeSnapshot
-            ? `当前快照：${activeSnapshot.name} · 绑定 ${activeSnapshot.skillName || "—"}`
+            ? `当前数据源：${activeSnapshot.name} · 绑定 ${activeSnapshot.skillName || "—"}`
             : `共 ${list.length} 条答案`}
         </div>
         <div className="flex-1" />
@@ -521,7 +517,7 @@ function AnswerPane({
       </div>
       {list.length === 0 ? (
         <div className="py-10 text-center text-sm text-gray-400">
-          该快照还没有人工答案
+          该数据源下还没有标准答案
         </div>
       ) : (
         <div className="space-y-2">
@@ -550,7 +546,7 @@ function AnswerPane({
               </div>
               {a.snapshotName && (
                 <div className="text-[11px] text-gray-600 mb-1">
-                  关联快照：{a.snapshotName}
+                  关联数据源：{a.snapshotName}
                   {a.skillName && <span className="ml-2">· Skill: {a.skillName}</span>}
                 </div>
               )}
@@ -781,7 +777,7 @@ function NewSnapshotModal({
     <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-auto">
         <div className="px-5 py-3 border-b flex items-center">
-          <div className="font-semibold text-gray-900">新建数据快照</div>
+          <div className="font-semibold text-gray-900">新建评测数据源</div>
           <div className="flex-1" />
           <button
             onClick={onClose}
@@ -845,7 +841,7 @@ function NewSnapshotModal({
             )}
           </div>
 
-          <Field label="快照名称" required>
+          <Field label="数据源名称" required>
             <input
               className="w-full rounded border px-2 py-1.5 text-sm"
               value={name}
@@ -909,7 +905,7 @@ function NewSnapshotModal({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={screenshotUrl}
-                    alt="snapshot preview"
+                    alt="数据源预览"
                     className="object-cover w-full h-full"
                   />
                 </div>
@@ -970,7 +966,7 @@ function NewSnapshotModal({
                 提交中
               </>
             ) : (
-              "固化快照"
+              "保存数据源"
             )}
           </Button>
         </div>
@@ -1041,7 +1037,7 @@ function NewAnswerModal({
           </button>
         </div>
         <div className="p-5 space-y-3">
-          <Field label="绑定数据快照" required>
+          <Field label="绑定评测数据源" required>
             <select
               value={snapshotId}
               onChange={(e) => setSnapshotId(e.target.value)}
@@ -1074,7 +1070,7 @@ function NewAnswerModal({
               className="w-full rounded border px-2 py-1.5 text-sm"
               value={answerText}
               onChange={(e) => setAnswerText(e.target.value)}
-              placeholder="基于快照数据的标准处理结论：结构化字段/结论/建议…"
+              placeholder="基于该数据源的标准处理结论：结构化字段/结论/建议…"
             />
           </Field>
           <Field label="附件">

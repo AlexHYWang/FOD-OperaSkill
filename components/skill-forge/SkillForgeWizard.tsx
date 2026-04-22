@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -125,21 +125,17 @@ export function SkillForgeWizard({ scene }: { scene: Scene }) {
 }
 
 function SceneHeader({ scene }: { scene: Scene }) {
+  const line = [scene.team, scene.process, scene.section, scene.node]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <div className="rounded-2xl border bg-gradient-to-br from-purple-50 to-white p-3">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="px-2 py-0.5 rounded text-[10.5px] font-semibold bg-purple-600 text-white">
-          正在打磨场景
-        </span>
-        <span className="text-sm font-bold text-gray-900">{scene.scene}</span>
-      </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-600">
-        <span>团队：{scene.team}</span>
-        <span>流程：{scene.process}</span>
-        <span>环节：{scene.section}</span>
-        <span>节点：{scene.node}</span>
-        <span>母 Skill：{scene.parentSkill}</span>
-      </div>
+      <div className="text-sm font-bold text-gray-900">{scene.scene}</div>
+      {line && (
+        <div className="text-[11px] text-gray-500 mt-0.5 truncate" title={line}>
+          {line}
+        </div>
+      )}
     </div>
   );
 }
@@ -246,7 +242,7 @@ function Step1Panel({
       {
         kind: "agent",
         content:
-          `子 Skill 1 生成完成。\n · 输出结果：5/7 条正确\n · 初步自评准确率：${72}%\n请 Review 后点「沉淀到 Table12」进入 Step 2。`,
+          `子 Skill 1 生成完成。\n · 输出结果：5/7 条正确\n · 初步自评准确率：${72}%\n请 Review 后点下方「沉淀」进入 Step 2。`,
       },
     ];
   }, [running, scene.scene]);
@@ -317,7 +313,7 @@ function Step1Panel({
               value={dataSource}
               onChange={(e) => setDataSource(e.target.value)}
               disabled={running || generated}
-              placeholder="飞书云文档 / OSS 链接，或选择评测集中的一个数据快照"
+              placeholder="飞书云文档 / OSS 链接，或选择评测集中的一条固定数据源"
               className="w-full rounded border px-2 py-1.5 text-sm disabled:bg-gray-50"
             />
           </div>
@@ -372,11 +368,11 @@ function Step1Panel({
                   : "bg-emerald-600 hover:bg-emerald-700 text-white"
               )}
             >
-              <Rocket size={13} /> 沉淀到 Table12，进入 Step 2
+              <Rocket size={13} /> 沉淀并进入 Step 2
             </button>
             {persistedId && (
               <div className="text-[10.5px] text-emerald-700">
-                Record ID: {persistedId}（若 Table12 未建，走 Mock）
+                ID: {persistedId}
               </div>
             )}
           </div>
@@ -384,7 +380,7 @@ function Step1Panel({
       </div>
 
       <OpenClawChat
-        title="OpenClaw · Step 1 初稿生成"
+        title="Step 1 · 初稿"
         playbook={playbook}
         autoplay={running}
         onFinish={() => setGenerated(true)}
@@ -424,28 +420,34 @@ function Step2Panel({
   s2Done: boolean;
 }) {
   const [datasetUrl, setDatasetUrl] = useState("");
-  const [round, setRound] = useState<0 | 1 | 2 | 3>(0);
+  /** 已完整播放脚本的轮数（0～3） */
+  const [completedRounds, setCompletedRounds] = useState(0);
+  /** 当前正在播放第几轮（1～3），0 表示空闲 */
+  const [playingRound, setPlayingRound] = useState(0);
+  const playingRoundRef = useRef(0);
   const [running, setRunning] = useState(false);
   const [reached, setReached] = useState(false);
 
   const accuracyProgression = [s1Accuracy || 72, 85, 94, 100];
 
   const playbook: PlaybookStep[] = useMemo(() => {
-    if (!running) return [];
-    const targetAcc = accuracyProgression[round];
+    if (!running || playingRound < 1) return [];
+    const r = playingRound;
+    const targets = [s1Accuracy || 72, 85, 94, 100];
+    const targetAcc = targets[r];
     return [
       {
         kind: "agent",
         content:
-          round === 1
+          r === 1
             ? `第 1 轮调优：我加强了对「审核阈值边界」的处理。现在跑你的测评集…`
-            : round === 2
+            : r === 2
             ? `第 2 轮调优：我补充了 2 条跨系统字段映射规则，并调整了异常回退策略。重新跑评测…`
             : `第 3 轮调优：我进一步收敛了边界 case，补齐最后 1 条知识规则。最终跑评测…`,
       },
       {
         kind: "progress",
-        label: `第 ${round} 轮：运行子 Skill 2 × 测评集`,
+        label: `第 ${r} 轮：运行子 Skill 2 × 测评集`,
         duration: 1800,
       },
       {
@@ -456,12 +458,13 @@ function Step2Panel({
             : `本轮准确率 ${targetAcc}%，还有 ${100 - targetAcc}% 可提升空间。我已定位到 ${100 - targetAcc > 10 ? "2" : "1"} 条可优化点，继续下一轮？`,
       },
     ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, round]);
+  }, [running, playingRound, s1Accuracy]);
 
   const startRound = () => {
-    if (round >= 3) return;
-    setRound((r) => Math.min(3, (r + 1) as 0 | 1 | 2 | 3) as 0 | 1 | 2 | 3);
+    if (completedRounds >= 3 || running || s2Done) return;
+    const next = completedRounds + 1;
+    playingRoundRef.current = next;
+    setPlayingRound(next);
     setRunning(true);
   };
 
@@ -482,10 +485,18 @@ function Step2Panel({
         version: "v2.0",
         accuracy: 100,
         passed: true,
-        config: JSON.stringify({ rounds: round, datasetUrl }, null, 2),
+        config: JSON.stringify({ rounds: 3, datasetUrl }, null, 2),
       }),
     });
     onDone(100);
+  };
+
+  const handleChatFinish = () => {
+    setRunning(false);
+    const pr = playingRoundRef.current;
+    setCompletedRounds(pr);
+    setPlayingRound(0);
+    if (pr === 3) setReached(true);
   };
 
   return (
@@ -494,17 +505,16 @@ function Step2Panel({
         <div className="rounded-2xl border bg-white p-4 space-y-3">
           <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <FlaskConical size={14} />
-            上传测评数据源 · 多轮调优
+            测评数据 · 多轮调优
           </div>
           <div className="text-[11px] text-gray-500">
-            OpenClaw 会基于「场景提示词 + 子 Skill 1 + 新增样本」迭代生成子 Skill 2，
-            你只需确认每一轮结果。达到 <b>{STEP2_MIN_ACCURACY}%</b> 才能进入 Step 3。
+            每轮跑完再点「继续」；达到 <b>{STEP2_MIN_ACCURACY}%</b> 后可沉淀并进入 Step 3。
           </div>
           <input
             value={datasetUrl}
             onChange={(e) => setDatasetUrl(e.target.value)}
-            disabled={round > 0}
-            placeholder="测评数据源链接（可从评测集选择一个快照）"
+            disabled={completedRounds > 0}
+            placeholder="测评数据源链接（可选）"
             className="w-full rounded border px-2 py-1.5 text-sm disabled:bg-gray-50"
           />
 
@@ -514,7 +524,7 @@ function Step2Panel({
             </div>
             <div className="space-y-1">
               {[1, 2, 3].map((i) => {
-                const ok = round >= i;
+                const ok = completedRounds >= i;
                 const acc = accuracyProgression[i];
                 return (
                   <div
@@ -540,13 +550,13 @@ function Step2Panel({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
-              disabled={running || round >= 3 || s2Done}
+              disabled={running || completedRounds >= 3 || s2Done}
               onClick={startRound}
               className={cn(
                 "inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold",
-                running || round >= 3 || s2Done
+                running || completedRounds >= 3 || s2Done
                   ? "bg-gray-200 text-gray-400"
                   : "bg-purple-600 hover:bg-purple-700 text-white"
               )}
@@ -556,10 +566,10 @@ function Step2Panel({
               ) : (
                 <Sparkles size={13} />
               )}
-              {round === 0
+              {completedRounds === 0
                 ? "开始第 1 轮调优"
-                : round < 3
-                ? `继续第 ${round + 1} 轮`
+                : completedRounds < 3
+                ? `继续第 ${completedRounds + 1} 轮`
                 : "已达 100%"}
             </button>
             {reached && !s2Done && (
@@ -575,13 +585,10 @@ function Step2Panel({
       </div>
 
       <OpenClawChat
-        title="OpenClaw · Step 2 调优对话"
+        title="Step 2 · 调优"
         playbook={playbook}
         autoplay={running}
-        onFinish={() => {
-          setRunning(false);
-          if (round === 3) setReached(true);
-        }}
+        onFinish={handleChatFinish}
       />
     </div>
   );
@@ -664,11 +671,8 @@ function Step3Panel({
             <FileBarChart size={14} />
             自动生成对比分析报告（Skill 1 ↔ 2）
           </div>
-          <div className="text-[11px] text-gray-500 leading-relaxed">
-            OpenClaw 会自动按 3 个维度生成报告并沉淀到 Table13：
-            <br />· 母框架结构一致性
-            <br />· 两版 Skill 配置差异
-            <br />· 准确率变化归因
+          <div className="text-[11px] text-gray-500">
+            结构一致性 · 配置差异 · 准确率归因
           </div>
           <button
             disabled={running || s3Done}
@@ -687,7 +691,7 @@ function Step3Panel({
         {ready && !s3Done && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3 space-y-2">
             <div className="text-[12px] text-emerald-800 font-semibold">
-              报告已生成，Review 后沉淀到 Table13
+              报告已生成，确认后写入多维表
             </div>
             <div className="text-[11.5px] text-gray-700 bg-white border rounded p-2 space-y-1.5">
               <div>
@@ -714,7 +718,7 @@ function Step3Panel({
       </div>
 
       <OpenClawChat
-        title="OpenClaw · Step 3 对比分析"
+        title="Step 3 · 对比"
         playbook={playbook}
         autoplay={running}
         onFinish={() => setReady(true)}
@@ -980,14 +984,14 @@ function Step4Panel({
           </button>
           {s4Done && s3Accuracy > 0 && (
             <div className="text-[11px] text-emerald-700">
-              🎉 全部四步完成！数据已沉淀到 Table7/9/12/13。
+              全部步骤已完成（演示数据已写入多维表）。
             </div>
           )}
         </div>
       </div>
 
       <OpenClawChat
-        title="OpenClaw · Step 4 沉淀"
+        title="Step 4 · 沉淀"
         playbook={playbook}
         autoplay={stage === "kb-generating" || stage === "skill3-generating" || stage === "report-generating"}
         onFinish={() => {

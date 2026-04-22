@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
       typeof body?.answerText === "string" ? body.answerText.trim() : "";
     if (!snapshotId || !title) {
       return NextResponse.json(
-        { error: "snapshotId 和答案标题不能为空" },
+        { error: "请选择评测数据源并填写答案标题" },
         { status: 400 }
       );
     }

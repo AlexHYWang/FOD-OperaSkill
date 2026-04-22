@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, FlaskConical, Wand2, Sparkles, ArrowRight } from "lucide-react";
+import { BookOpen, FlaskConical, Wand2, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface StepDef {
@@ -53,8 +53,8 @@ const STEPS: StepDef[] = [
     num: "STEP 2",
     label: "质量标杆",
     title: "评测集管理",
-    subtitle: "数据快照 + 人工标准答案",
-    desc: "线上 MCP 抽样 / 手工上传快照，多位同学产出标准答案用于评测打分。",
+    subtitle: "评测数据源 + 人工标准答案",
+    desc: "线上 MCP（演示）与离线上传固定输入与返回，多位同学维护标准答案用于评测打分。",
     href: "/evaluation",
     tone: "emerald",
     icon: <FlaskConical size={18} />,
@@ -63,21 +63,11 @@ const STEPS: StepDef[] = [
     num: "STEP 3",
     label: "打磨生成",
     title: "打磨 Skill 平台",
-    subtitle: "OpenClaw 云 Agent · 4 步向导",
-    desc: "AI 辅助生成子 Skill1 / 2 / 3，对比分析 → 知识库沉淀，全链路自动化。",
+    subtitle: "场景选择 · 多步向导",
+    desc: "按场景生成与调优子 Skill，对比与知识库沉淀（演示态）。",
     href: "/skill-forge",
     tone: "purple",
     icon: <Wand2 size={18} />,
-  },
-  {
-    num: "STEP 4",
-    label: "日常作业",
-    title: "Skill 作业中心",
-    subtitle: "使用 Skill · 反馈 Badcase",
-    desc: "一线同学日常在作业中心调用 Skill，遇到问题一键回流知识库闭环。",
-    href: "/operate/console",
-    tone: "amber",
-    icon: <Sparkles size={18} />,
   },
 ];
 
@@ -86,14 +76,8 @@ export function HomeStepCards() {
     <section>
       <div className="flex items-baseline justify-between mb-2">
         <h2 className="text-sm font-bold text-gray-900">Skill 全链路工作台入口</h2>
-        <Link
-          href="/workflow"
-          className="text-xs text-blue-600 hover:text-blue-700"
-        >
-          查看全景流程图 →
-        </Link>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {STEPS.map((s) => (
           <StepCard key={s.href} s={s} />
         ))}

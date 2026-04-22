@@ -1,16 +1,7 @@
 "use client";
 
 import { Suspense, useMemo, useState } from "react";
-import {
-  Wand2,
-  Download,
-  Sparkles,
-  ArrowRight,
-  Package,
-  PlugZap,
-  Loader2,
-  Search,
-} from "lucide-react";
+import { Wand2, Sparkles, ArrowRight, Loader2, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { AppLayout } from "@/components/AppLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -71,11 +62,7 @@ function SkillForgePageInner() {
   return (
     <AppLayout team={team} onTeamChange={setTeam} user={user}>
       <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
-        <PageHeader
-          title="打磨 Skill 平台 · OpenClaw 云 Agent"
-          subtitle="选择场景 → 4 步自动化 Skill 生成（SOP/审核 + 知识库 → 初稿 → 调优 → 对比 → 沉淀）"
-          icon={<Wand2 size={18} />}
-        />
+        <PageHeader title="打磨 Skill 平台" icon={<Wand2 size={18} />} />
 
         {!scene ? (
           <Landing
@@ -97,77 +84,7 @@ function Landing({
   team: string;
   onPick: (s: Scene) => void;
 }) {
-  return (
-    <div className="space-y-4">
-      <ToolsPanel />
-      <ScenePicker team={team} onPick={onPick} />
-    </div>
-  );
-}
-
-function ToolsPanel() {
-  return (
-    <section className="rounded-2xl border bg-gradient-to-br from-indigo-50 to-white p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-indigo-600 text-white inline-flex items-center gap-1">
-          STEP 0
-        </span>
-        <span className="text-sm font-bold text-gray-900">开始前请先下载必要工具</span>
-      </div>
-      <div className="text-[11.5px] text-gray-500 mb-3">
-        两个工具会深度融合到打磨过程中：母框架用于合成 Skill 骨架，OpenClaw 云 Agent 负责驱动对话和自动化评测。
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <ToolCard
-          icon={<Package size={14} />}
-          title="母框架 · mother_framework_v1.1.3"
-          desc="Skill 的结构模板 zip，包含 7 个标准节点与默认配置。"
-          buttonText="下载 zip（演示态）"
-          onClick={() => alert("演示态：点击后返回签名下载链接（此处为 Mock）")}
-        />
-        <ToolCard
-          icon={<PlugZap size={14} />}
-          title="OpenClaw 云 Agent 插件"
-          desc="Chrome 扩展（Mock），用于连接云端 Agent、接收脚本推送与评测结果。"
-          buttonText="获取插件"
-          onClick={() => alert("演示态：打开 Chrome 扩展商店（Mock）")}
-        />
-      </div>
-    </section>
-  );
-}
-
-function ToolCard({
-  icon,
-  title,
-  desc,
-  buttonText,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  buttonText: string;
-  onClick: () => void;
-}) {
-  return (
-    <div className="rounded-xl border bg-white p-3 flex items-start gap-3">
-      <div className="h-8 w-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-gray-900">{title}</div>
-        <div className="text-[11px] text-gray-500 mt-0.5">{desc}</div>
-        <Button
-          size="sm"
-          onClick={onClick}
-          className="mt-2 bg-indigo-600 hover:bg-indigo-700 gap-1"
-        >
-          <Download size={13} /> {buttonText}
-        </Button>
-      </div>
-    </div>
-  );
+  return <ScenePicker team={team} onPick={onPick} />;
 }
 
 // 演示用预置场景池（也允许用户自行选择流程 → 环节 → 节点）
@@ -227,12 +144,8 @@ function ScenePicker({
 
   return (
     <section className="rounded-2xl border bg-white p-4 space-y-4">
-      <div className="flex items-center gap-2">
-        <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-purple-600 text-white inline-flex items-center gap-1">
-          STEP 1
-        </span>
-        <span className="text-sm font-bold text-gray-900">选择一个场景开始打磨</span>
-      </div>
+      <div className="text-sm font-bold text-gray-900">选择场景</div>
+      <p className="text-[11px] text-gray-500">点选推荐场景，或下方自定义流程与场景名。</p>
 
       {/* 搜索预置场景 */}
       <div>
@@ -276,9 +189,7 @@ function ScenePicker({
 
       {/* 自定义场景 */}
       <div className="rounded-xl border border-dashed border-gray-300 p-3 space-y-2">
-        <div className="text-[12px] font-semibold text-gray-800 flex items-center gap-1">
-          <Sparkles size={12} /> 自定义场景（按你的团队真实流程）
-        </div>
+        <div className="text-[12px] font-semibold text-gray-800">自定义</div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <select
             value={process}

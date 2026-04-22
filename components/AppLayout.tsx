@@ -16,12 +16,6 @@ import {
   Home as HomeIcon,
   BookOpen,
   FlaskConical,
-  Flag,
-  Boxes,
-  Sparkles,
-  Map,
-  Eye,
-  EyeOff,
   Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,16 +61,13 @@ interface NavGroup {
 }
 
 const ALL: FODRole[] = [...FOD_ROLES];
-const FOD_FRONTLINE: FODRole[] = ["FOD一线操作"];
-const FOD_LEADER: FODRole[] = ["FOD一线AI管理"];
-const FOD_ADMIN: FODRole[] = ["FOD综管"];
 
 /**
  * prd_mock v2 导航：4 板块
- *   概览：我的工作台 / 全景 / 全链路看板 / Skill 注册 / 作业中心 / Badcase
+ *   概览：我的工作台 / 全链路看板（演示精简：隐藏全景、注册中心、作业、Badcase）
  *   知识库管理：统一管理中心 /knowledge
  *   评测集管理：统一管理中心 /evaluation
- *   打磨 Skill 平台：/skill-forge（OpenClaw Mock）
+ *   打磨 Skill 平台：/skill-forge
  */
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -91,38 +82,10 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ALL,
       },
       {
-        href: "/workflow",
-        label: "全景流程图",
-        sublabel: "Step1 → Step2 三泳道",
-        icon: <Map size={16} />,
-        roles: ALL,
-      },
-      {
         href: "/dashboard",
         label: "全链路看板",
         sublabel: "各阶段 Skill 数量 · 卡点",
         icon: <BarChart3 size={16} />,
-        roles: [...FOD_LEADER, ...FOD_ADMIN],
-      },
-      {
-        href: "/skills/registry",
-        label: "Skill 注册中心",
-        sublabel: "全生命周期 · 成员管理",
-        icon: <Boxes size={16} />,
-        roles: ALL,
-      },
-      {
-        href: "/operate/console",
-        label: "Skill 作业中心",
-        sublabel: "Step2 · 日常使用",
-        icon: <Sparkles size={16} />,
-        roles: [...FOD_FRONTLINE, ...FOD_LEADER, ...FOD_ADMIN],
-      },
-      {
-        href: "/operate/badcase",
-        label: "Badcase 反馈",
-        sublabel: "回流知识库 · 闭环",
-        icon: <Flag size={16} />,
         roles: ALL,
       },
     ],
@@ -146,12 +109,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "eval",
     title: "评测集管理",
-    subtitle: "数据快照 + 标准答案",
+    subtitle: "评测数据源 + 标准答案",
     items: [
       {
         href: "/evaluation",
         label: "评测集管理中心",
-        sublabel: "快照 / 答案 / 评测运行",
+        sublabel: "数据源 / 答案 / 评测运行",
         icon: <FlaskConical size={16} />,
         roles: ALL,
       },
@@ -161,12 +124,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "forge",
     title: "打磨 Skill 平台",
-    subtitle: "OpenClaw 云 Agent",
+    subtitle: "场景向导",
     items: [
       {
         href: "/skill-forge",
         label: "打磨 Skill 平台",
-        sublabel: "4 步向导 · 生成子 Skill",
+        sublabel: "选场景 · 多步打磨",
         icon: <Wand2 size={16} />,
         roles: ALL,
       },
@@ -176,7 +139,6 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 const SIDEBAR_COLLAPSED_KEY = "fod-sidebar-collapsed";
-const SIDEBAR_ONLY_MINE_KEY = "fod-sidebar-only-mine";
 
 function RoleDotForHref({ href }: { href: string }) {
   const role: FODRole | undefined = PAGE_OWNER_ROLE[href];
@@ -418,12 +380,10 @@ export function AppLayout({
   const { effectiveRole } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [onlyMine, setOnlyMine] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     setCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
-    setOnlyMine(localStorage.getItem(SIDEBAR_ONLY_MINE_KEY) === "1");
   }, []);
 
   const toggleCollapsed = () => {
@@ -437,30 +397,11 @@ export function AppLayout({
     });
   };
 
-  const toggleOnlyMine = () => {
-    setOnlyMine((v) => {
-      const nv = !v;
-      if (typeof window !== "undefined") {
-        if (nv) localStorage.setItem(SIDEBAR_ONLY_MINE_KEY, "1");
-        else localStorage.removeItem(SIDEBAR_ONLY_MINE_KEY);
-      }
-      return nv;
-    });
-  };
-
-  // 过滤策略：
-  // - 一线角色（FOD一线操作 / FOD一线AI管理）：总是按角色过滤
-  // - 综管：默认显示全部；勾选「仅看我的」后按角色过滤
+  // 过滤策略：一线操作 / 一线 AI 管理按角色过滤菜单；综管始终显示全部
   const isFrontline =
     effectiveRole === "FOD一线操作" || effectiveRole === "FOD一线AI管理";
-  const canToggleOnlyMine = effectiveRole === "FOD综管";
-  const filterRoles: FODRole | null = effectiveRole
-    ? isFrontline
-      ? effectiveRole
-      : canToggleOnlyMine && onlyMine
-      ? effectiveRole
-      : null
-    : null;
+  const filterRoles: FODRole | null =
+    effectiveRole && isFrontline ? effectiveRole : null;
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -538,25 +479,6 @@ export function AppLayout({
             collapsed ? "w-14" : "w-64"
           )}
         >
-          {!collapsed && canToggleOnlyMine && effectiveRole && (
-            <div className="p-2 border-b">
-              <button
-                onClick={toggleOnlyMine}
-                className={cn(
-                  "w-full flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border transition-colors",
-                  onlyMine
-                    ? "bg-blue-50 text-blue-700 border-blue-200"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-                )}
-              >
-                {onlyMine ? <Eye size={12} /> : <EyeOff size={12} />}
-                {onlyMine
-                  ? `仅看 ${effectiveRole} 的菜单`
-                  : "显示全部菜单"}
-              </button>
-            </div>
-          )}
-
           <div className="p-2 space-y-0.5 overflow-y-auto flex-1">
             {NAV_GROUPS.map((g) => (
               <NavGroupBlock
