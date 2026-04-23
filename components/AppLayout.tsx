@@ -17,6 +17,7 @@ import {
   BookOpen,
   FlaskConical,
   Wand2,
+  LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TeamSelector } from "@/components/TeamSelector";
@@ -63,11 +64,12 @@ interface NavGroup {
 const ALL: FODRole[] = [...FOD_ROLES];
 
 /**
- * prd_mock v2 导航：4 板块
- *   概览：我的工作台 / 全链路看板（演示精简：隐藏全景、注册中心、作业、Badcase）
- *   知识库管理：统一管理中心 /knowledge
- *   评测集管理：统一管理中心 /evaluation
- *   打磨 Skill 平台：/skill-forge
+ * prd_mock v2 导航
+ *   概览：我的工作台 / 全链路看板
+ *   梳理场景：/section1
+ *   知识库管理：/knowledge
+ *   评测集管理：/evaluation
+ *   场景化 Skill 生产：/skill-forge
  */
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -86,6 +88,21 @@ const NAV_GROUPS: NavGroup[] = [
         label: "全链路看板",
         sublabel: "各阶段 Skill 数量 · 卡点",
         icon: <BarChart3 size={16} />,
+        roles: ALL,
+      },
+    ],
+    defaultOpen: true,
+  },
+  {
+    id: "section1",
+    title: "梳理场景",
+    subtitle: "PTP/OTC 等 · 任务与标签",
+    items: [
+      {
+        href: "/section1",
+        label: "梳理场景",
+        sublabel: "流程节点与场景卡",
+        icon: <LayoutGrid size={16} />,
         roles: ALL,
       },
     ],
@@ -123,13 +140,13 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     id: "forge",
-    title: "打磨 Skill 平台",
-    subtitle: "场景向导",
+    title: "场景化 Skill 生产",
+    subtitle: "选场景 · 多步向导",
     items: [
       {
         href: "/skill-forge",
-        label: "打磨 Skill 平台",
-        sublabel: "选场景 · 多步打磨",
+        label: "场景化 Skill 生产",
+        sublabel: "选场景 · 多步向导",
         icon: <Wand2 size={16} />,
         roles: ALL,
       },

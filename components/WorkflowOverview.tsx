@@ -103,7 +103,7 @@ const LANES: LaneDef[] = [
       {
         key: "skill_train",
         seq: 5,
-        title: "打磨 Skill",
+        title: "场景化 Skill 生产",
         subtitle: "OpenClaw 4 步向导",
         href: "/skill-forge",
         role: "FOD一线操作",

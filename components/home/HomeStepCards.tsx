@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, FlaskConical, Wand2, ArrowRight } from "lucide-react";
+import { BookOpen, FlaskConical, Wand2, ArrowRight, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface StepDef {
@@ -9,7 +9,6 @@ interface StepDef {
   num: string;
   title: string;
   subtitle: string;
-  desc: string;
   href: string;
   tone: "blue" | "emerald" | "purple" | "amber";
   icon: React.ReactNode;
@@ -41,30 +40,36 @@ const TONE_MAP: Record<StepDef["tone"], { ring: string; chip: string; btn: strin
 const STEPS: StepDef[] = [
   {
     num: "STEP 1",
+    label: "任务梳理",
+    title: "梳理场景",
+    subtitle: "PTP/OTC 等 · 任务级场景与标签",
+    href: "/section1",
+    tone: "amber",
+    icon: <LayoutGrid size={18} />,
+  },
+  {
+    num: "STEP 2",
     label: "资料沉淀",
     title: "知识库管理",
     subtitle: "提交 · 审核 · 发布 · 版本",
-    desc: "一线录入 SOP / 审核标准 / 场景素材，主管审核发布，综管统筹版本。",
     href: "/knowledge",
     tone: "blue",
     icon: <BookOpen size={18} />,
   },
   {
-    num: "STEP 2",
+    num: "STEP 3",
     label: "质量标杆",
     title: "评测集管理",
     subtitle: "评测数据源 + 人工标准答案",
-    desc: "线上 MCP（演示）与离线上传固定输入与返回，多位同学维护标准答案用于评测打分。",
     href: "/evaluation",
     tone: "emerald",
     icon: <FlaskConical size={18} />,
   },
   {
-    num: "STEP 3",
-    label: "打磨生成",
-    title: "打磨 Skill 平台",
+    num: "STEP 4",
+    label: "开发调优",
+    title: "场景化 Skill 生产",
     subtitle: "场景选择 · 多步向导",
-    desc: "按场景生成与调优子 Skill，对比与知识库沉淀（演示态）。",
     href: "/skill-forge",
     tone: "purple",
     icon: <Wand2 size={18} />,
@@ -77,7 +82,7 @@ export function HomeStepCards() {
       <div className="flex items-baseline justify-between mb-2">
         <h2 className="text-sm font-bold text-gray-900">Skill 全链路工作台入口</h2>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {STEPS.map((s) => (
           <StepCard key={s.href} s={s} />
         ))}
@@ -111,7 +116,6 @@ function StepCard({ s }: { s: StepDef }) {
       </div>
       <div className="text-base font-bold text-gray-900">{s.title}</div>
       <div className="text-[12px] text-gray-500 mt-0.5">{s.subtitle}</div>
-      <p className="text-[12px] text-gray-600 mt-2 leading-relaxed">{s.desc}</p>
       <div
         className={cn(
           "mt-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all group-hover:translate-x-0.5",

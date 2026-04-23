@@ -155,7 +155,7 @@ export function MyActivityPanel() {
             href="/skill-forge"
             className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-700"
           >
-            继续打磨 Skill <ArrowRight size={12} />
+            继续场景化生产 <ArrowRight size={12} />
           </Link>
         </div>
 

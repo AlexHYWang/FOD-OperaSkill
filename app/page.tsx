@@ -68,8 +68,8 @@ function UnauthenticatedLanding() {
           </span>
         </h1>
         <p className="text-base text-gray-600 max-w-2xl mx-auto leading-relaxed">
-          STEP1 资料沉淀：知识库管理 · STEP2 质量标杆：评测集管理 · STEP3
-          打磨生成：打磨 Skill 平台 · STEP4 日常作业：Skill 作业中心
+          主链路四步：STEP1 梳理场景 · STEP2 知识库管理 · STEP3 评测集管理 · STEP4
+          场景化 Skill 生产。日常执行见 Skill 作业中心（与主链路并列的作业面）。
         </p>
         <div className="mt-8">
           <Button

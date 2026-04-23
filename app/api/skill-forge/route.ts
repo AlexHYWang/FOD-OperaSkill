@@ -1,5 +1,5 @@
 /**
- * 打磨 Skill 平台 · 数据持久化
+ * 场景化 Skill 生产 · 数据持久化
  *   GET  /api/skill-forge?kind=sub-skill|report&parent=XXX
  *   POST /api/skill-forge  { kind, ...fields }
  *

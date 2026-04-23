@@ -56,13 +56,15 @@ function SkillForgePageInner() {
   if (authLoading) return <Fallback />;
   if (!isLoggedIn)
     return (
-      <div className="p-10 text-sm text-gray-500">请先登录以使用打磨 Skill 平台。</div>
+      <div className="p-10 text-sm text-gray-500">
+        请先登录以使用「场景化 Skill 生产」。
+      </div>
     );
 
   return (
     <AppLayout team={team} onTeamChange={setTeam} user={user}>
       <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-4">
-        <PageHeader title="打磨 Skill 平台" icon={<Wand2 size={18} />} />
+        <PageHeader title="场景化 Skill 生产" icon={<Wand2 size={18} />} />
 
         {!scene ? (
           <Landing
@@ -175,7 +177,7 @@ function ScenePicker({
                 {s.section} · {s.node}
               </div>
               <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600 group-hover:translate-x-0.5 transition-transform">
-                开始打磨 <ArrowRight size={12} />
+                开始 <ArrowRight size={12} />
               </div>
             </button>
           ))}
@@ -264,7 +266,7 @@ function ScenePicker({
           )}
         >
           <Wand2 size={13} />
-          开始打磨自定义场景
+          从自定义场景开始
         </Button>
       </div>
     </section>

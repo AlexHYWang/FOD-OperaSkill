@@ -1,11 +1,12 @@
 /**
  * 3 种角色的工作台配置（KPI / 工作流步骤 / CTA）· prd_mock v2（精简至 4 板块 + 作业闭环）
  *
- * 新 4 板块：
+ * 新 4 板块 + 梳理场景：
+ *   /section1        · 梳理场景
  *   /knowledge       · 知识库管理中心
  *   /evaluation      · 评测集管理中心
- *   /skill-forge     · 打磨 Skill 平台（OpenClaw 云 Agent，Mock）
- *   /operate/console · Skill 作业中心（Step2 使用阶段，Mock 轻量）
+ *   /skill-forge     · 场景化 Skill 生产（OpenClaw 云 Agent，Mock）
+ *   /operate/console · Skill 作业中心（使用阶段，Mock 轻量）
  *
  * KPI 数据源：/api/workflow/overview（真实）或 ?demo=1（Mock）
  */
@@ -61,6 +62,11 @@ export const ROLE_WORKBENCH: Record<FODRole, RoleWorkbenchConfig> = {
     ],
     steps: [
       {
+        label: "梳理场景",
+        subtitle: "全团队任务级场景",
+        href: "/section1",
+      },
+      {
         label: "知识库管理",
         subtitle: "审核 + 发布 + 版本",
         href: "/knowledge",
@@ -71,9 +77,9 @@ export const ROLE_WORKBENCH: Record<FODRole, RoleWorkbenchConfig> = {
         href: "/evaluation",
       },
       {
-        label: "Skill 注册中心",
-        subtitle: "全生命周期 + 成员管理",
-        href: "/skills/registry",
+        label: "场景化 Skill 生产",
+        subtitle: "OpenClaw 多步向导",
+        href: "/skill-forge",
       },
       {
         label: "全链路看板",
@@ -114,22 +120,27 @@ export const ROLE_WORKBENCH: Record<FODRole, RoleWorkbenchConfig> = {
     ],
     steps: [
       {
-        label: "1. 知识审核",
+        label: "1. 梳理场景",
+        subtitle: "本团队任务级流程",
+        href: "/section1",
+      },
+      {
+        label: "2. 知识审核",
         subtitle: "发布团队知识条目",
         href: "/knowledge",
       },
       {
-        label: "2. 评测准备",
+        label: "3. 评测准备",
         subtitle: "评测数据源 + 标准答案",
         href: "/evaluation",
       },
       {
-        label: "3. 打磨 Skill",
-        subtitle: "云 Agent 4 步向导",
+        label: "4. 场景化 Skill 生产",
+        subtitle: "OpenClaw 4 步向导",
         href: "/skill-forge",
       },
       {
-        label: "4. Badcase 治理",
+        label: "5. Badcase 治理",
         subtitle: "回流到知识库",
         href: "/operate/badcase",
       },
