@@ -101,7 +101,7 @@ export default function OnboardingPage() {
             第一次来？请先选择你的团队
           </h1>
           <p className="text-sm text-white/80 leading-relaxed">
-            你会以这个团队的身份梳理场景、打磨 Skill。其它团队的内容你可以查看但不能修改。
+            你会以这个团队的身份做「场景梳理」与「Skill创建」。其它团队的内容你可以查看但不能修改。
             <br />
             如选错了请联系管理员在后台调整。
           </p>

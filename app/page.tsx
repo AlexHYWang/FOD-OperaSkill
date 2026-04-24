@@ -159,7 +159,7 @@ export default function HomePage() {
             {[
               {
                 step: "1",
-                title: "梳理场景",
+                title: "场景梳理",
                 desc: "把你团队的日常工作场景列成清单，每条打一个标签",
                 href: "/section1",
                 icon: <LayoutGrid size={18} />,
@@ -167,8 +167,8 @@ export default function HomePage() {
               },
               {
                 step: "2",
-                title: "打磨 Skill",
-                desc: "挑一个 ★纯线下 场景，按 4 步把 Skill 打磨完成",
+                title: "Skill创建",
+                desc: "挑一个 ★纯线下 场景，按 4 步完成 Skill 创建",
                 href: "/section2",
                 icon: <Zap size={18} />,
                 tone: "purple",
@@ -355,13 +355,13 @@ function CardRecent({
             <span className="text-3xl font-black text-blue-600">
               {s.section1Count}
             </span>
-            <span className="text-xs text-gray-500">个 · 已梳理场景</span>
+            <span className="text-xs text-gray-500">个 · 在场景梳理中已登记</span>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-purple-600">
               {s.section2StepCount}
             </span>
-            <span className="text-xs text-gray-500">步 · 已打磨 Skill</span>
+            <span className="text-xs text-gray-500">步 · 已在 Skill创建 中提交</span>
           </div>
           {s.section1Count === 0 && s.section2StepCount === 0 && (
             <div className="mt-2 text-xs text-gray-400 leading-relaxed">
@@ -396,13 +396,13 @@ function CardInProgress({
         </div>
       ) : items.length === 0 ? (
         <div className="text-xs text-gray-400 leading-relaxed py-2">
-          还没打磨过任何场景
+          还没有在 Skill创建 中留下记录
           <br />
           <button
             onClick={() => router.push("/section2")}
             className="mt-2 inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium"
           >
-            去挑一个场景打磨 <ArrowRight size={12} />
+            去选场景，开始创建 <ArrowRight size={12} />
           </button>
         </div>
       ) : (

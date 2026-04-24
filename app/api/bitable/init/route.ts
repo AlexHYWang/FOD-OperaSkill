@@ -10,6 +10,7 @@ import {
   createTable,
   createField,
 } from "@/lib/feishu";
+import { getTable1ParadigmBitableField } from "@/lib/bitable-table1-paradigm";
 
 // 字段类型常量
 const FIELD_TYPE = {
@@ -87,6 +88,7 @@ export async function POST() {
           ],
         },
       },
+      getTable1ParadigmBitableField(),
       { field_name: "提交时间", type: FIELD_TYPE.DATE },
     ];
 

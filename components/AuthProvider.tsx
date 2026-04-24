@@ -47,7 +47,10 @@ interface AuthContextType {
   /** 用户归属团队 / 角色 / 部门（来自 Table3） */
   profile: UserProfileClient;
   profileLoading: boolean;
-  /** 当前查看的团队是否就是我归属的团队（决定编辑权限） */
+  /**
+   * 是否可编辑当前「查看团队」下的数据：归属团队与查看团队一致即可；
+   * Table3（FEISHU_TABLE3_ID）中「角色」为「管理员」时，可编辑任意已选团队，不受归属团队限制。
+   */
   canEdit: boolean;
   /** 重新拉取 profile（onboarding 成功后调用） */
   refreshProfile: () => Promise<void>;
@@ -165,8 +168,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const isTableAdmin = profile.role === "管理员";
   const canEdit =
-    !!profile.isBootstrapped && !!team && profile.team === team;
+    !!profile.isBootstrapped &&
+    !!team &&
+    (profile.team === team || isTableAdmin);
 
   return (
     <AuthContext.Provider

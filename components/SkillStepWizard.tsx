@@ -156,7 +156,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
         }
         setTasks(items);
 
-        // 自动预选 URL query task（仅 ★ 纯线下场景可进入「打磨 Skill」）
+        // 自动预选 URL query task（仅 ★ 纯线下场景可进入「Skill创建」）
         if (preselectedTask) {
           const found = items.find((t) => t.taskName === preselectedTask);
           if (found && feishuLabelIsPureManual(found.label)) {
@@ -199,7 +199,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
 
   const manualTasks = tasks.filter((t) => feishuLabelIsPureManual(t.label));
 
-  // 「打磨 Skill」仅展示纯线下：若当前选中场景不符合则清除
+  // 「Skill创建」仅展示纯线下：若当前选中场景不符合则清除
   useEffect(() => {
     setSelectedTask((prev) => {
       if (!prev) return null;
@@ -238,7 +238,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
   if (tasks.length === 0) {
     return (
       <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-4">
-        该团队暂无场景记录，请先在「梳理场景」里录入日常工作场景并保存。
+        该团队暂无场景记录，请先在「场景梳理」里录入日常工作场景并保存。
       </div>
     );
   }
@@ -246,7 +246,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
   if (manualTasks.length === 0) {
     return (
       <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-4">
-        该团队暂无标记为「★ 纯线下」的场景。「打磨 Skill」仅展示纯线下场景，请先在「梳理场景」里为需要打磨的场景打上纯线下标签。
+        该团队暂无标记为「★ 纯线下」的场景。「Skill创建」仅展示纯线下场景，请先在「场景梳理」里为要创建 Skill 的场景打上纯线下标签。
       </div>
     );
   }
@@ -330,7 +330,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
         <div className="border border-gray-200 rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
             <div className="text-sm font-semibold text-gray-700">
-              {currentProcess.name} — 选择要打磨的场景
+              {currentProcess.name} — 选择要创建 Skill 的场景
             </div>
             <button
               onClick={loadData}

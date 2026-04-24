@@ -36,15 +36,15 @@ export default function Section2Page() {
           <div>
             <div className="flex items-center gap-2 text-purple-600 mb-1">
               <Zap size={18} />
-              <span className="text-sm font-medium">打磨 Skill</span>
+              <span className="text-sm font-medium">Skill创建</span>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {preselectedTask ? preselectedTask : "选一个场景 · 打磨 Skill"}
+              {preselectedTask ? preselectedTask : "选一个场景 · Skill创建"}
             </h1>
             <p className="text-gray-500 text-sm mt-1">
               {preselectedTask
                 ? "按 4 步走：生成子Skill1 → 调优到子Skill2（准确率 100%）→ 对比报告 → 优化到子Skill3"
-                : "下方是你团队标记为 ★纯线下 的场景。点一个卡片开始，四步搞定 Skill 打磨。"}
+                : "下方是你团队标记为 ★纯线下 的场景。点一个卡片开始，四步完成 Skill 创建。"}
             </p>
           </div>
           {!canEdit && team && profile.team && (
@@ -53,6 +53,14 @@ export default function Section2Page() {
               正在查看 <b>{team}</b> 团队（只读）
             </div>
           )}
+          {canEdit &&
+            profile.role === "管理员" &&
+            team &&
+            team !== profile.team && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-50 border border-violet-200 text-xs text-violet-800">
+                管理员：可编辑 <b>{team}</b> 团队数据
+              </div>
+            )}
         </div>
 
         {/* 团队未选 */}
@@ -73,12 +81,12 @@ export default function Section2Page() {
           <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
             <Info size={14} className="flex-shrink-0 mt-0.5" />
             <div>
-              <b>先选一个场景再往下做。</b> 没看到想打磨的场景？先回
+              <b>先选一个场景再往下做。</b> 没看到想用的场景？先回
               <button
                 onClick={() => router.push("/section1")}
                 className="underline font-medium hover:text-blue-900 ml-0.5"
               >
-                梳理场景
+                场景梳理
               </button>
               ，把它打上 ★纯线下 标签。
             </div>

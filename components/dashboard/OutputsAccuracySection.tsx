@@ -892,7 +892,7 @@ function EmptyState({
           : `${processLabel} 流程下暂无提交记录`}
       </div>
       <div className="text-xs text-gray-300">
-        请先到【打磨 Skill】中提交步骤文件
+        请先到【Skill创建】中提交步骤文件
       </div>
     </div>
   );

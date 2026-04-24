@@ -174,7 +174,7 @@ export async function DELETE(request: NextRequest) {
     ).trim();
     const team = String(target.fields["团队名称"] || "").trim();
 
-    // 检查该场景是否已有 Skill 打磨提交
+    // 检查该场景是否已有 Skill 创建（Table2）相关提交
     let hasSubmissions = false;
     if (taskName && team) {
       const table2Id = process.env.FEISHU_TABLE2_ID;

@@ -21,16 +21,23 @@ import { cn } from "@/lib/utils";
 import {
   TASK_LABELS,
   parseTaskLabelFromFeishu,
+  parseParadigmsFromFeishu,
+  paradigmIdsToFeishuFieldValue,
+  TABLE1_FIELD_PARADIGM,
+  PARADIGM_DEFS,
   type TaskLabel,
   type E2EProcess,
   type ProcessSection,
   type ProcessNode,
+  type ParadigmId,
 } from "@/lib/constants";
 
 interface TaskRow {
   id: string;
   taskName: string;
   label: TaskLabel | "";
+  /** 与 Table1「归属范式」多选一致；老数据可为空 */
+  paradigms: ParadigmId[];
   saved: boolean;
   recordId?: string;
   submittedAt?: number;
@@ -60,6 +67,7 @@ interface DupAlert {
   duplicates: { taskName: string; submittedAt?: number }[];
   newOnes: TaskRow[];
   bulkLabel?: TaskLabel | "";
+  bulkParadigms?: ParadigmId[];
   isBatch: boolean;
 }
 
@@ -69,6 +77,7 @@ interface AddTaskState {
   sectionName: string;
   taskName: string;
   label: TaskLabel | "";
+  paradigms: ParadigmId[];
   saving: boolean;
 }
 
@@ -80,6 +89,7 @@ interface BatchState {
   step: "input" | "label";
   tempTasks: string[];
   bulkLabel: TaskLabel | "";
+  bulkParadigms: ParadigmId[];
 }
 
 interface DeleteTarget {
@@ -134,6 +144,8 @@ export function NodeMappingGrid({
   // 多选 recordId 集合；仅在 !readOnly 时启用
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [applyingBulk, setApplyingBulk] = useState(false);
+  const [paradigmBulkOpen, setParadigmBulkOpen] = useState(false);
+  const [paradigmBulkSelection, setParadigmBulkSelection] = useState<ParadigmId[]>([]);
   const [postSaveHint, setPostSaveHint] = useState<{ nodeId: string; count: number } | null>(null);
 
   // 哪些场景已经在 Table2 里有任何一条提交（用来决定是否允许普通用户删除）
@@ -200,12 +212,16 @@ export function NodeMappingGrid({
           if (!e2eField && sectionName && sectionNameToId[sectionName] === undefined) continue;
 
           const label = parseTaskLabelFromFeishu(labelRaw);
+          const paradigms = parseParadigmsFromFeishu(
+            record.fields[TABLE1_FIELD_PARADIGM]
+          );
 
           if (!map[nodeId]) map[nodeId] = [];
           map[nodeId].push({
             id: generateId(),
             taskName: taskName || "",
             label,
+            paradigms,
             saved: true,
             recordId: record.id,
             submittedAt,
@@ -282,6 +298,7 @@ export function NodeMappingGrid({
       sectionName,
       taskName: "",
       label: "",
+      paradigms: [],
       saving: false,
     });
     setTimeout(() => addInputRef.current?.focus(), 50);
@@ -290,7 +307,7 @@ export function NodeMappingGrid({
   const handleAddSave = async () => {
     if (!addState) return;
     const name = addState.taskName.trim();
-    if (!name || !addState.label) return;
+    if (!name || !addState.label || addState.paradigms.length === 0) return;
 
     // 重复检测
     const existing = nodeTasksMap[addState.nodeId] || [];
@@ -311,6 +328,11 @@ export function NodeMappingGrid({
     setAddState((prev) => prev && { ...prev, saving: true });
     const labelOpt = TASK_LABELS.find((l) => l.value === addState.label);
     const labelText = labelOpt ? `${labelOpt.icon} ${labelOpt.label}` : "";
+    const paradigmField: Record<string, unknown> = {
+      [TABLE1_FIELD_PARADIGM]: paradigmIdsToFeishuFieldValue(
+        addState.paradigms
+      ),
+    };
 
     try {
       const r = await fetch("/api/bitable/records", {
@@ -326,6 +348,7 @@ export function NodeMappingGrid({
             场景名称: name,
             任务名称: name,
             标签: labelText,
+            ...paradigmField,
           },
         }),
       });
@@ -339,6 +362,7 @@ export function NodeMappingGrid({
             id: generateId(),
             taskName: name,
             label: addState.label as TaskLabel,
+            paradigms: [...addState.paradigms],
             saved: true,
             recordId,
             submittedAt: Date.now(),
@@ -363,12 +387,22 @@ export function NodeMappingGrid({
       .map((l) => l.trim())
       .filter(Boolean);
     if (lines.length === 0) return;
-    setBatchState((prev) => prev && { ...prev, step: "label", tempTasks: lines, bulkLabel: "" });
+    setBatchState((prev) =>
+      prev && {
+        ...prev,
+        step: "label",
+        tempTasks: lines,
+        bulkLabel: "",
+        bulkParadigms: [],
+      }
+    );
   };
 
   const saveBatchImport = async () => {
     if (!batchState || batchState.step !== "label" || !batchState.bulkLabel) return;
-    const { nodeId, sectionName, nodeName, tempTasks, bulkLabel } = batchState;
+    if (batchState.bulkParadigms.length === 0) return;
+    const { nodeId, sectionName, nodeName, tempTasks, bulkLabel, bulkParadigms } =
+      batchState;
     const existingTasks = nodeTasksMap[nodeId] || [];
     const savedNames = new Set(existingTasks.filter((t) => t.saved).map((t) => t.taskName.trim()));
 
@@ -384,10 +418,20 @@ export function NodeMappingGrid({
         id: generateId(),
         taskName: name,
         label: bulkLabel,
+        paradigms: [...bulkParadigms],
         saved: false,
       }));
       setBatchState(null);
-      setDupAlert({ nodeId, nodeName, sectionName, duplicates, newOnes, bulkLabel, isBatch: true });
+      setDupAlert({
+        nodeId,
+        nodeName,
+        sectionName,
+        duplicates,
+        newOnes,
+        bulkLabel,
+        bulkParadigms,
+        isBatch: true,
+      });
       return;
     }
 
@@ -396,9 +440,17 @@ export function NodeMappingGrid({
       id: generateId(),
       taskName: name,
       label: bulkLabel,
+      paradigms: [...bulkParadigms],
       saved: false,
     }));
-    await commitBatchRows(nodeId, nodeName, sectionName, newOnes, bulkLabel);
+    await commitBatchRows(
+      nodeId,
+      nodeName,
+      sectionName,
+      newOnes,
+      bulkLabel,
+      bulkParadigms
+    );
   };
 
   const commitBatchRows = async (
@@ -406,11 +458,15 @@ export function NodeMappingGrid({
     nodeName: string,
     sectionName: string,
     rows: TaskRow[],
-    bulkLabel: TaskLabel | ""
+    bulkLabel: TaskLabel | "",
+    bulkParadigms: ParadigmId[]
   ) => {
     if (rows.length === 0) return;
     const labelOpt = TASK_LABELS.find((l) => l.value === bulkLabel);
     const labelText = labelOpt ? `${labelOpt.icon} ${labelOpt.label}` : "";
+    const pField: Record<string, unknown> = {
+      [TABLE1_FIELD_PARADIGM]: paradigmIdsToFeishuFieldValue(bulkParadigms),
+    };
     setSaving((prev) => ({ ...prev, [nodeId]: true }));
     try {
       const newRows: TaskRow[] = [];
@@ -428,6 +484,7 @@ export function NodeMappingGrid({
               场景名称: row.taskName.trim(),
               任务名称: row.taskName.trim(),
               标签: labelText,
+              ...pField,
             },
           }),
         });
@@ -436,6 +493,7 @@ export function NodeMappingGrid({
         newRows.push({
           ...row,
           label: bulkLabel as TaskLabel,
+          paradigms: [...bulkParadigms],
           saved: true,
           recordId,
           submittedAt: Date.now(),
@@ -458,11 +516,18 @@ export function NodeMappingGrid({
 
   const handleDupContinue = async () => {
     if (!dupAlert) return;
-    const { nodeId, nodeName, sectionName, newOnes, bulkLabel, isBatch } = dupAlert;
+    const { nodeId, nodeName, sectionName, newOnes, bulkLabel, bulkParadigms, isBatch } = dupAlert;
     setDupAlert(null);
     if (newOnes.length === 0) return;
     if (isBatch && bulkLabel !== undefined) {
-      await commitBatchRows(nodeId, nodeName, sectionName, newOnes, bulkLabel);
+      await commitBatchRows(
+        nodeId,
+        nodeName,
+        sectionName,
+        newOnes,
+        bulkLabel,
+        bulkParadigms ?? []
+      );
     }
   };
 
@@ -630,6 +695,52 @@ export function NodeMappingGrid({
     }
   };
 
+  const toggleParadigmInList = (list: ParadigmId[], id: ParadigmId): ParadigmId[] => {
+    if (list.includes(id)) return list.filter((x) => x !== id);
+    return [...list, id];
+  };
+
+  const applyBulkParadigmsConfirm = async () => {
+    if (selectedIds.size === 0 || paradigmBulkSelection.length === 0) return;
+    setApplyingBulk(true);
+    const feishuVal = paradigmIdsToFeishuFieldValue(paradigmBulkSelection);
+    try {
+      const targets = allSavedTasks.filter(
+        (x) => x.task.recordId && selectedIds.has(x.task.recordId)
+      );
+      await Promise.all(
+        targets.map((x) =>
+          fetch("/api/bitable/records", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              table: "1",
+              recordId: x.task.recordId,
+              fields: { [TABLE1_FIELD_PARADIGM]: feishuVal },
+            }),
+          })
+        )
+      );
+      const picked = [...paradigmBulkSelection];
+      setNodeTasksMap((prev) => {
+        const next: Record<string, TaskRow[]> = { ...prev };
+        for (const x of targets) {
+          next[x.nodeId] = (next[x.nodeId] || []).map((t) =>
+            t.id === x.task.id ? { ...t, paradigms: picked } : t
+          );
+        }
+        return next;
+      });
+      setSelectedIds(new Set());
+      setParadigmBulkOpen(false);
+      setParadigmBulkSelection([]);
+    } catch (err) {
+      console.error("批量设范式失败:", err);
+    } finally {
+      setApplyingBulk(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-gray-500">
@@ -700,6 +811,7 @@ export function NodeMappingGrid({
                     step: "input",
                     tempTasks: [],
                     bulkLabel: "",
+                    bulkParadigms: [],
                   });
                   setTimeout(() => batchTextRef.current?.focus(), 50);
                 }}
@@ -735,7 +847,7 @@ export function NodeMappingGrid({
               </div>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 max-h-[min(70vh,560px)] overflow-y-auto">
               {/* Step1 场景名 */}
               <div>
                 <label className="text-xs font-semibold text-gray-700 flex items-center gap-1 mb-1.5">
@@ -764,7 +876,7 @@ export function NodeMappingGrid({
                   选一个标签
                   <span className="text-red-500">*</span>
                   <span className="text-gray-400 font-normal ml-1">
-                    （必选，决定后续是否能进入「打磨 Skill」）
+                    （必选，决定后续是否能进入「Skill创建」）
                   </span>
                 </label>
                 <div className="grid grid-cols-1 gap-2">
@@ -798,6 +910,53 @@ export function NodeMappingGrid({
                 </div>
               </div>
 
+              {/* Step3 归属范式（多选、至少 1 项） */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 flex items-center gap-1 mb-1.5">
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px]">
+                    3
+                  </span>
+                  归属范式
+                  <span className="text-red-500">*</span>
+                  <span className="text-gray-400 font-normal ml-1">（多选，至少 1 项）</span>
+                </label>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {PARADIGM_DEFS.map((def) => {
+                    const on = addState.paradigms.includes(def.id);
+                    return (
+                      <label
+                        key={def.id}
+                        className={cn(
+                          "flex items-start gap-2 px-2.5 py-2 rounded-lg border cursor-pointer text-xs",
+                          on
+                            ? "border-violet-400 bg-violet-50 text-violet-900"
+                            : "border-gray-200 bg-white text-gray-700"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 accent-violet-600"
+                          checked={on}
+                          onChange={() =>
+                            setAddState(
+                              (prev) =>
+                                prev && {
+                                  ...prev,
+                                  paradigms: toggleParadigmInList(prev.paradigms, def.id),
+                                }
+                            )
+                          }
+                        />
+                        <span>
+                          <span className="font-semibold text-[11px]">{def.shortLabel}</span>{" "}
+                          {def.title}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="pt-1 text-[11px] text-gray-500 bg-gray-50 px-3 py-2 rounded-lg flex gap-1.5">
                 <ClipboardList size={12} className="shrink-0 mt-0.5 text-gray-400" />
                 <span>
@@ -813,7 +972,10 @@ export function NodeMappingGrid({
               <Button
                 onClick={handleAddSave}
                 disabled={
-                  !addState.taskName.trim() || !addState.label || addState.saving
+                  !addState.taskName.trim() ||
+                  !addState.label ||
+                  addState.paradigms.length === 0 ||
+                  addState.saving
                 }
                 className="gap-1"
               >
@@ -881,6 +1043,7 @@ export function NodeMappingGrid({
                     </div>
                   ))}
                 </div>
+                <div className="text-xs text-gray-500">统一标签</div>
                 <div className="flex flex-wrap gap-2">
                   {TASK_LABELS.map((label) => (
                     <button
@@ -899,6 +1062,47 @@ export function NodeMappingGrid({
                     </button>
                   ))}
                 </div>
+                <div className="text-xs font-semibold text-gray-800 pt-1">
+                  归属范式 <span className="text-red-500">*</span>（多选，至少 1 项）
+                </div>
+                <div className="max-h-44 overflow-y-auto space-y-1 border border-gray-200 rounded-lg p-2 bg-white">
+                  {PARADIGM_DEFS.map((def) => {
+                    const on = batchState.bulkParadigms.includes(def.id);
+                    return (
+                      <label
+                        key={def.id}
+                        className={cn(
+                          "flex items-start gap-2 px-2 py-1.5 rounded text-xs cursor-pointer",
+                          on
+                            ? "bg-violet-50 text-violet-900"
+                            : "text-gray-700 hover:bg-gray-50"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 accent-violet-600 shrink-0"
+                          checked={on}
+                          onChange={() =>
+                            setBatchState((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    bulkParadigms: toggleParadigmInList(
+                                      prev.bulkParadigms,
+                                      def.id
+                                    ),
+                                  }
+                                : prev
+                            )
+                          }
+                        />
+                        <span>
+                          <span className="font-semibold">{def.shortLabel}</span> {def.title}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
                 <div className="flex gap-2 justify-between">
                   <Button
                     variant="outline"
@@ -910,7 +1114,12 @@ export function NodeMappingGrid({
                   </Button>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setBatchState(null)}>取消</Button>
-                    <Button onClick={saveBatchImport} disabled={!batchState.bulkLabel}>
+                    <Button
+                      onClick={saveBatchImport}
+                      disabled={
+                        !batchState.bulkLabel || batchState.bulkParadigms.length === 0
+                      }
+                    >
                       <Save size={14} className="mr-1" />
                       保存 {batchState.tempTasks.length} 条
                     </Button>
@@ -1011,6 +1220,18 @@ export function NodeMappingGrid({
           ))}
           <div className="w-px h-4 bg-gray-200" />
           <button
+            type="button"
+            disabled={applyingBulk}
+            onClick={() => {
+              setParadigmBulkSelection([]);
+              setParadigmBulkOpen(true);
+            }}
+            className="text-sm px-2.5 py-1 rounded-full border font-medium border-violet-300 text-violet-800 bg-violet-50 hover:ring-2 hover:ring-violet-200 hover:ring-offset-1 disabled:opacity-50 whitespace-nowrap"
+          >
+            设范式
+          </button>
+          <div className="w-px h-4 bg-gray-200" />
+          <button
             onClick={requestDeleteSelected}
             disabled={applyingBulk}
             className="text-sm px-2.5 py-1 rounded-full border font-semibold transition-all text-red-600 bg-red-50 border-red-200 hover:bg-red-100 hover:ring-2 hover:ring-red-300 hover:ring-offset-1 disabled:opacity-50 flex items-center gap-1"
@@ -1025,6 +1246,73 @@ export function NodeMappingGrid({
           >
             <X size={16} />
           </button>
+        </div>
+      )}
+
+      {paradigmBulkOpen && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"
+          onClick={() => {
+            setParadigmBulkOpen(false);
+            setParadigmBulkSelection([]);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal
+          >
+            <div className="font-bold text-gray-900">批量设置归属范式</div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              将更新已选 {selectedIds.size} 条场景在「归属范式」字段的值（不修改标签）。请至少选 1 个范式。
+            </p>
+            <div className="max-h-64 overflow-y-auto space-y-1 border border-gray-200 rounded-lg p-2">
+              {PARADIGM_DEFS.map((def) => {
+                const on = paradigmBulkSelection.includes(def.id);
+                return (
+                  <label
+                    key={def.id}
+                    className={cn(
+                      "flex items-start gap-2 px-2 py-1.5 rounded text-xs cursor-pointer",
+                      on ? "bg-violet-50 text-violet-900" : "text-gray-700 hover:bg-gray-50"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-violet-600 shrink-0"
+                      checked={on}
+                      onChange={() =>
+                        setParadigmBulkSelection((prev) =>
+                          toggleParadigmInList(prev, def.id)
+                        )
+                      }
+                    />
+                    <span>
+                      <span className="font-semibold">{def.shortLabel}</span> {def.title}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setParadigmBulkOpen(false);
+                  setParadigmBulkSelection([]);
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                onClick={applyBulkParadigmsConfirm}
+                disabled={applyingBulk || paradigmBulkSelection.length === 0}
+              >
+                应用到已选
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1084,7 +1372,7 @@ function DeleteConfirmDialog({
                 : `确认删除选中的 ${total} 个场景？`}
             </div>
             <div className="text-xs text-gray-500 mt-0.5">
-              删除后不可恢复；同名场景在「梳理场景」里的标签也会一并移除
+              删除后不可恢复；同名场景在「场景梳理」里的标签也会一并移除
             </div>
           </div>
         </div>
@@ -1103,7 +1391,7 @@ function DeleteConfirmDialog({
               </span>
               {t.hasSubmission && (
                 <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
-                  已有打磨记录
+                  已登记 Skill 创建
                 </span>
               )}
             </div>
@@ -1117,7 +1405,7 @@ function DeleteConfirmDialog({
 
         {confirm.blocked && (
           <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 leading-relaxed">
-            其中 <b>{confirm.blockedCount}</b> 个场景已有打磨记录，普通用户不能删除。
+            其中 <b>{confirm.blockedCount}</b> 个场景已有「Skill创建」相关记录，普通用户不能删除。
             <br />
             请取消勾选这些条目，或联系管理员处理。
           </div>
@@ -1127,8 +1415,8 @@ function DeleteConfirmDialog({
           <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 leading-relaxed flex gap-2">
             <ShieldCheck size={14} className="mt-0.5 shrink-0 text-amber-600" />
             <span>
-              管理员模式：其中 <b>{submissionCount}</b> 个场景已有打磨记录，Table2
-              历史记录仍会保留，仅不再展示在「梳理场景」。
+              管理员模式：其中 <b>{submissionCount}</b> 个场景已有「Skill创建」相关记录，Table2
+              历史记录仍会保留，仅不再展示在「场景梳理」。
             </span>
           </div>
         )}
@@ -1523,7 +1811,7 @@ function TaskCard({
         )}
         {!readOnly && task.recordId && !canSelect && (
           <span
-            title="该场景已有 Skill 打磨记录，仅管理员可批量操作"
+            title="该场景已有「Skill创建」相关记录，仅管理员可批量操作"
             className="mt-0.5 shrink-0 inline-flex items-center justify-center w-3 h-3 text-gray-300"
           >
             <Lock size={10} />
@@ -1563,7 +1851,7 @@ function TaskCard({
             title={
               canDelete
                 ? "删除这个场景"
-                : "该场景已有 Skill 打磨记录，只有管理员可删除"
+                : "该场景已有「Skill创建」相关记录，只有管理员可删除"
             }
             className={cn(
               "flex-shrink-0 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 focus:opacity-100",
@@ -1590,11 +1878,29 @@ function TaskCard({
           </span>
         )}
       </div>
+      <div className="flex flex-wrap gap-0.5 mt-1.5 min-h-[18px]">
+        {task.paradigms.length > 0 ? (
+          task.paradigms.map((pid) => {
+            const d = PARADIGM_DEFS.find((p) => p.id === pid);
+            return d ? (
+              <span
+                key={pid}
+                title={d.title}
+                className="text-[10px] leading-tight px-1 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200"
+              >
+                {d.shortLabel}
+              </span>
+            ) : null;
+          })
+        ) : (
+          <span className="text-[10px] text-gray-400">范式未设</span>
+        )}
+      </div>
       {isPureManual && (
         <button
           type="button"
           onClick={onNavigate}
-          title="打开「打磨 Skill」，继续这个场景"
+          title="打开「Skill创建」，继续这个场景"
           className={cn(
             "mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg py-2 px-2",
             "text-xs font-semibold text-white shadow-sm border border-orange-700",
@@ -1602,7 +1908,7 @@ function TaskCard({
             "transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-1"
           )}
         >
-          <span>打磨 Skill</span>
+          <span>Skill创建</span>
           <ArrowRight size={16} strokeWidth={2.5} className="flex-shrink-0" aria-hidden />
         </button>
       )}

@@ -394,7 +394,7 @@ export const TASK_LABELS: LabelOption[] = [
     value: "pure_manual",
     icon: "★",
     label: "纯线下",
-    description: "纯线下操作（优先进入「打磨 Skill」）",
+    description: "纯线下操作（优先进入「Skill创建」）",
     color: "text-orange-700",
     bgColor: "bg-orange-50",
     borderColor: "border-orange-300",
@@ -418,6 +418,117 @@ export const TASK_LABELS: LabelOption[] = [
     borderColor: "border-red-300",
   },
 ];
+
+/** Table1（流程节点映射）多选列字段名，须与飞书、API 入参 key 一致 */
+export const TABLE1_FIELD_PARADIGM = "归属范式" as const;
+
+export type ParadigmId = "p1" | "p2" | "p3" | "p4" | "p5" | "p6";
+
+export interface ParadigmDef {
+  id: ParadigmId;
+  /** 与 Bitable 创建字段/写入记录时的 option name 逐字一致 */
+  feishuOptionName: string;
+  shortLabel: string;
+  title: string;
+  description: string;
+}
+
+/**
+ * 六种作业范式；feishuOptionName 与迁移/初始化时 MULTI_SELECT 的 options 绑定，勿随意改。
+ */
+export const PARADIGM_DEFS: readonly ParadigmDef[] = [
+  {
+    id: "p1",
+    feishuOptionName: "范式① 数据提取-格式转化-系统导入/智能填写",
+    shortLabel: "①",
+    title: "数据提取 → 格式转换 → 导入/智能填单",
+    description: "多介质导出 → 按模板转换 → 导入或智能填到系统",
+  },
+  {
+    id: "p2",
+    feishuOptionName: "范式② 多源采集-交叉核对-差异处理",
+    shortLabel: "②",
+    title: "多源数据采集 → 交叉核对 → 差异处理",
+    description: "A/B 取数 → 比对 → 查因与处理",
+  },
+  {
+    id: "p3",
+    feishuOptionName: "范式③ 规则计算-分摊-会计凭证",
+    shortLabel: "③",
+    title: "规则计算 → 分摊分配 → 凭证生成",
+    description: "取数 → 公式/分摊 → 凭证明细",
+  },
+  {
+    id: "p4",
+    feishuOptionName: "范式④ 单据审核-规则校验-放行或异常",
+    shortLabel: "④",
+    title: "单据审核 → 规则校验 → 放行/异常",
+    description: "接单据 → 逐条规则 → 放行或标异常",
+  },
+  {
+    id: "p5",
+    feishuOptionName: "范式⑤ 定时或事件-自动执行-结果推送",
+    shortLabel: "⑤",
+    title: "定时/事件触发 → 自动执行 → 结果推送",
+    description: "调度或事件 → 系统执行 → 下游通知",
+  },
+  {
+    id: "p6",
+    feishuOptionName: "范式⑥ 线下台账-系统管理-核对预警",
+    shortLabel: "⑥",
+    title: "线下台账 → 系统化管理 → 自动核对/预警",
+    description: "Excel/台账迁入 → 系统维护 → 对账与预警",
+  },
+];
+
+const PARADIGM_NAME_TO_ID: Record<string, ParadigmId> = Object.fromEntries(
+  PARADIGM_DEFS.map((d) => [d.feishuOptionName, d.id])
+) as Record<string, ParadigmId>;
+
+export const ALL_PARADIGM_IDS: readonly ParadigmId[] = PARADIGM_DEFS.map(
+  (d) => d.id
+);
+
+export function isParadigmId(s: string): s is ParadigmId {
+  return (ALL_PARADIGM_IDS as readonly string[]).includes(s);
+}
+
+/** 从飞书多选列原始值解析为 id 列表（去重、过滤未知项） */
+export function parseParadigmsFromFeishu(feishu: unknown): ParadigmId[] {
+  const out: ParadigmId[] = [];
+  const seen = new Set<ParadigmId>();
+
+  const push = (name: string) => {
+    const t = name.trim();
+    if (!t) return;
+    const id = PARADIGM_NAME_TO_ID[t];
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  };
+
+  if (feishu == null) return out;
+  if (Array.isArray(feishu)) {
+    for (const x of feishu) {
+      if (typeof x === "string") push(x);
+    }
+    return out;
+  }
+  if (typeof feishu === "string") {
+    push(feishu);
+    return out;
+  }
+  return out;
+}
+
+export function paradigmIdsToFeishuFieldValue(
+  ids: readonly ParadigmId[]
+): string[] {
+  return ids.map(
+    (id) => PARADIGM_DEFS.find((d) => d.id === id)!.feishuOptionName
+  );
+}
 
 export const PRESET_TEAMS = [
   "武汉中心",

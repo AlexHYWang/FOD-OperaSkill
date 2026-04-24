@@ -41,7 +41,7 @@ const NAV_ITEMS = [
   {
     href: "/section1",
     icon: <LayoutGrid size={18} />,
-    label: "梳理场景",
+    label: "场景梳理",
     sublabel: "把团队日常工作列成清单",
     color: "text-blue-600",
     bg: "bg-blue-50",
@@ -49,7 +49,7 @@ const NAV_ITEMS = [
   {
     href: "/section2",
     icon: <Zap size={18} />,
-    label: "打磨 Skill",
+    label: "Skill创建",
     sublabel: "把场景做成可复用的 AI Skill",
     color: "text-purple-600",
     bg: "bg-purple-50",

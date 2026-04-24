@@ -92,11 +92,11 @@ export default function Section1Page() {
             <div>
               <div className="flex items-center gap-2 text-blue-600 mb-0.5">
                 <LayoutGrid size={18} />
-                <span className="text-sm font-medium">梳理场景</span>
+                <span className="text-sm font-medium">场景梳理</span>
               </div>
-              <h1 className="text-xl font-bold text-gray-900">梳理场景 · 把团队日常工作列成清单</h1>
+              <h1 className="text-xl font-bold text-gray-900">场景梳理 · 把团队日常工作列成清单</h1>
               <p className="text-gray-500 text-xs mt-0.5">
-                挑一个端到端流程 → 在对应节点下点「+ 添加场景」→ 给场景选一个标签 → 保存
+                挑一个端到端流程 → 在对应节点下点「+ 添加场景」→ 选标签与至少一项「归属范式」→ 保存
               </p>
               {!canEdit && team && profile.team && (
                 <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-xs text-amber-700">
@@ -104,6 +104,15 @@ export default function Section1Page() {
                   正在查看 <b>{team}</b> 团队数据（只读）· 你的归属团队是 <b>{profile.team}</b>
                 </div>
               )}
+              {canEdit &&
+                profile.role === "管理员" &&
+                team &&
+                team !== profile.team && (
+                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-xs text-violet-800">
+                    管理员：当前正在编辑 <b>{team}</b> 团队数据（可写；不限于你的归属团队{" "}
+                    <b>{profile.team}</b>）
+                  </div>
+                )}
             </div>
           </div>
 
@@ -143,7 +152,7 @@ export default function Section1Page() {
                   ? "bg-orange-500 text-white border-orange-500 shadow-sm"
                   : "bg-white text-gray-700 border-gray-300 hover:border-orange-400 hover:text-orange-600"
               )}
-              title="「打磨 Skill」重点改造的是★纯线下场景"
+              title="「Skill创建」侧重点是★纯线下场景"
             >
               <span>★ 仅纯线下</span>
               {onlyManual && (

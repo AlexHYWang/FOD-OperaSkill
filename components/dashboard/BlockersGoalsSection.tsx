@@ -250,7 +250,7 @@ export function BlockersGoalsSection({ team, isAdmin, user, mode }: Props) {
           看板只汇总展示。要
           {isBlockers ? "登记卡点" : "登记明日目标"}
           ，请到
-          <b className="mx-1">作业中心 · 打磨 Skill</b>
+          <b className="mx-1">作业中心 · Skill创建</b>
           的具体步骤内填写，会自动带上 场景/步骤 绑定信息。
         </div>
         <button
@@ -309,7 +309,7 @@ function BlockersByDesc({
           onClick={onGoToHub}
           className="inline-flex items-center gap-1 text-sm text-blue-700 font-medium hover:text-blue-900 bg-white border border-blue-200 rounded-lg px-3 py-1.5"
         >
-          去作业中心 · 打磨 Skill 登记 <ArrowRight size={13} />
+          去作业中心 · Skill创建 登记 <ArrowRight size={13} />
         </button>
       </div>
     );
@@ -448,7 +448,7 @@ function GoalsList({
           onClick={onGoToHub}
           className="inline-flex items-center gap-1 text-sm text-emerald-700 font-medium hover:text-emerald-900 bg-white border border-emerald-200 rounded-lg px-3 py-1.5"
         >
-          去作业中心 · 打磨 Skill 登记 <ArrowRight size={13} />
+          去作业中心 · Skill创建 登记 <ArrowRight size={13} />
         </button>
       </div>
     );
