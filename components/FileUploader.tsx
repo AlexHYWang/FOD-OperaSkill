@@ -16,6 +16,8 @@ interface FileUploaderProps {
   label: string;
   hint?: string;
   accept?: string;
+  purpose?: "common" | "skill";
+  maxSizeMB?: number;
   onUpload: (result: UploadedFile) => void;
   uploaded?: UploadedFile | null;
   disabled?: boolean;
@@ -28,14 +30,20 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-
-async function uploadFile(file: File): Promise<UploadedFile> {
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`文件「${file.name}」超过 100MB 限制，请将文件压缩为 .zip 后重试`);
+async function uploadFile(
+  file: File,
+  options: { purpose?: "common" | "skill"; maxSizeMB?: number } = {}
+): Promise<UploadedFile> {
+  const maxSizeMB = options.maxSizeMB ?? (options.purpose === "skill" ? 200 : 100);
+  if (options.purpose === "skill" && !file.name.toLowerCase().endsWith(".zip")) {
+    throw new Error("SKILL 文件只允许上传 ZIP 包");
+  }
+  if (file.size > maxSizeMB * 1024 * 1024) {
+    throw new Error(`文件「${file.name}」超过 ${maxSizeMB}MB 限制，请压缩后重试`);
   }
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("purpose", options.purpose || "common");
   const res = await fetch("/api/upload", { method: "POST", body: formData });
   const data = await res.json();
   if (!res.ok || !data.success) throw new Error(data.error || "上传失败");
@@ -46,6 +54,8 @@ export function FileUploader({
   label,
   hint,
   accept,
+  purpose,
+  maxSizeMB,
   onUpload,
   uploaded,
   disabled,
@@ -61,7 +71,7 @@ export function FileUploader({
     setError(null);
     setUploading(true);
     try {
-      const result = await uploadFile(file);
+      const result = await uploadFile(file, { purpose, maxSizeMB });
       onUpload(result);
     } catch (err) {
       setError(String(err));
@@ -156,7 +166,7 @@ export function FileUploader({
                 {accept && (
                   <div className="text-xs text-gray-400 mt-0.5">支持格式：{accept}</div>
                 )}
-                <div className="text-xs text-gray-400 mt-0.5">单文件上限 100MB，超出请压缩为 .zip</div>
+                <div className="text-xs text-gray-400 mt-0.5">单文件上限 {maxSizeMB ?? (purpose === "skill" ? 200 : 100)}MB，超出请压缩后重试</div>
               </div>
             </div>
           )}
@@ -182,6 +192,8 @@ interface MultiFileUploaderProps {
   label: string;
   hint?: string;
   accept?: string;
+  purpose?: "common" | "skill";
+  maxSizeMB?: number;
   onUpload: (results: UploadedFile[]) => void;
   uploaded?: UploadedFile[];
   disabled?: boolean;
@@ -192,6 +204,8 @@ export function MultiFileUploader({
   label,
   hint,
   accept,
+  purpose,
+  maxSizeMB,
   onUpload,
   uploaded = [],
   disabled,
@@ -212,7 +226,7 @@ export function MultiFileUploader({
     const results: UploadedFile[] = [];
     try {
       for (let i = 0; i < arr.length; i++) {
-        const result = await uploadFile(arr[i]);
+        const result = await uploadFile(arr[i], { purpose, maxSizeMB });
         results.push(result);
         setProgress({ done: i + 1, total: arr.length });
       }
@@ -317,7 +331,7 @@ export function MultiFileUploader({
               {accept && (
                 <div className="text-xs text-gray-400 mt-0.5">支持格式：{accept}</div>
               )}
-              <div className="text-xs text-gray-400 mt-0.5">单文件上限 100MB，超出请压缩为 .zip</div>
+              <div className="text-xs text-gray-400 mt-0.5">单文件上限 {maxSizeMB ?? (purpose === "skill" ? 200 : 100)}MB，超出请压缩后重试</div>
             </div>
           </div>
         )}

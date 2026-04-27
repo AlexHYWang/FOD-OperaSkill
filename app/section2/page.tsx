@@ -2,9 +2,9 @@
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Zap, Info, Lock, Users } from "lucide-react";
+import { UploadCloud, Info, Lock, Users } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
-import { SkillStepWizard } from "@/components/SkillStepWizard";
+import { SkillUploadCenter } from "@/components/SkillUploadCenter";
 import { useAuth } from "@/components/AuthProvider";
 
 export default function Section2Page() {
@@ -35,16 +35,16 @@ export default function Section2Page() {
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 text-purple-600 mb-1">
-              <Zap size={18} />
-              <span className="text-sm font-medium">Skill创建</span>
+              <UploadCloud size={18} />
+              <span className="text-sm font-medium">SKILL上传</span>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {preselectedTask ? preselectedTask : "选一个场景 · Skill创建"}
+              {preselectedTask ? preselectedTask : "选一个场景 · SKILL上传"}
             </h1>
             <p className="text-gray-500 text-sm mt-1">
               {preselectedTask
-                ? "按 4 步走：生成子Skill1 → 调优到子Skill2（准确率 100%）→ 对比报告 → 优化到子Skill3"
-                : "下方是你团队标记为 ★纯线下 的场景。点一个卡片开始，四步完成 Skill 创建。"}
+                ? "为该场景上传一个训练好的 SKILL ZIP 包，后续可绑定评测集和线下财多多测试结果。"
+                : "下方是你团队标记为 ★纯线下 的场景。点一个卡片上传训练好的 SKILL ZIP 包。"}
             </p>
           </div>
           {!canEdit && team && profile.team && (
@@ -88,14 +88,14 @@ export default function Section2Page() {
               >
                 场景梳理
               </button>
-              ，把它打上 ★纯线下 标签。
+                ，把它打上 ★纯线下 标签。
             </div>
           </div>
         )}
 
         {/* 统一进度视图 */}
         {team && (
-          <SkillStepWizard
+          <SkillUploadCenter
             team={team}
             userName={user.name}
             readOnly={!canEdit}

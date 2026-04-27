@@ -552,6 +552,42 @@ export async function uploadFileToDrive(
   return { file_token: fileToken, url: webUrl };
 }
 
+export async function downloadFileFromDrive(
+  fileToken: string
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const token = await getTenantAccessToken();
+  const res = await fetch(`${FEISHU_BASE}/drive/v1/files/${fileToken}/download`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`下载飞书文件失败: ${res.status} ${res.statusText}`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    contentType: res.headers.get("content-type") || "application/octet-stream",
+  };
+}
+
+export async function sendFeishuTextMessage(
+  receiveId: string,
+  text: string,
+  receiveIdType: "open_id" | "user_id" | "email" = "open_id"
+) {
+  const query = new URLSearchParams({ receive_id_type: receiveIdType });
+  const res = await feishuFetch(`/im/v1/messages?${query}`, {
+    method: "POST",
+    body: JSON.stringify({
+      receive_id: receiveId,
+      msg_type: "text",
+      content: JSON.stringify({ text }),
+    }),
+  });
+  const data = await res.json();
+  if (data.code !== 0) throw new Error(`发送飞书消息失败: ${data.msg}`);
+  return data.data;
+}
+
 // ─────────────────────────────────────────────
 // 获取所有记录（自动分页）
 // ─────────────────────────────────────────────

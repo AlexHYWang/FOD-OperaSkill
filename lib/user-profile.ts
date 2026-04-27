@@ -6,6 +6,7 @@
  *   - 团队名称  text（历史遗留字段，管理员记录里是"管理员"）
  *   - 归属团队  text（v2 新增，用户实际所属团队）
  *   - 角色      single_select（管理员 / 普通用户）
+ *   - 是否团队主管 checkbox（勾选后可审核本团队知识库/评测催办）
  *   - 部门      text（自动从飞书通讯录回填）
  *   - 更新时间  date
  */
@@ -22,6 +23,7 @@ export interface UserProfile {
   name?: string;
   team: string;
   role: "管理员" | "普通用户" | "";
+  isTeamSupervisor: boolean;
   department: string;
   recordId?: string;
   updatedAt?: number;
@@ -93,6 +95,7 @@ export async function getUserProfile(
       name,
       team: "",
       role: "",
+      isTeamSupervisor: false,
       department: "",
       isBootstrapped: false,
     };
@@ -105,6 +108,7 @@ export async function getUserProfile(
       name,
       team: "",
       role: "",
+      isTeamSupervisor: false,
       department: "",
       isBootstrapped: false,
     };
@@ -128,6 +132,11 @@ export async function getUserProfile(
         : roleRaw === "普通用户"
         ? "普通用户"
         : "",
+    isTeamSupervisor:
+      f["是否团队主管"] === true ||
+      f["是否团队主管"] === 1 ||
+      f["是否团队主管"] === "true" ||
+      (Array.isArray(f["是否团队主管"]) && f["是否团队主管"].length > 0),
     department,
     recordId: record.record_id,
     updatedAt,
@@ -178,6 +187,12 @@ export async function upsertUserTeam(
       openId,
       team,
       role: keepRole,
+      isTeamSupervisor:
+        existing.fields["是否团队主管"] === true ||
+        existing.fields["是否团队主管"] === 1 ||
+        existing.fields["是否团队主管"] === "true" ||
+        (Array.isArray(existing.fields["是否团队主管"]) &&
+          existing.fields["是否团队主管"].length > 0),
       department: departmentName,
       recordId: existing.record_id,
       updatedAt: now,
@@ -198,6 +213,7 @@ export async function upsertUserTeam(
     openId,
     team,
     role: "普通用户",
+    isTeamSupervisor: false,
     department: departmentName,
     recordId: rec.record_id,
     updatedAt: now,
@@ -218,4 +234,44 @@ export async function isAdminUser(openId: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function getAllUserProfiles(): Promise<UserProfile[]> {
+  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
+  const table3Id = process.env.FEISHU_TABLE3_ID;
+  if (!appToken || !table3Id) return [];
+  const all = await getAllRecords(appToken, table3Id);
+  return all.map((record) => {
+    const f = record.fields;
+    const openId = extractPersonOpenIds(f["人员"])[0] || "";
+    const roleRaw = readTextField(f, "角色");
+    return {
+      openId,
+      team: readTextField(f, "归属团队") || readTextField(f, "团队名称"),
+      role:
+        roleRaw === "管理员"
+          ? "管理员"
+          : roleRaw === "普通用户"
+          ? "普通用户"
+          : "",
+      isTeamSupervisor:
+        f["是否团队主管"] === true ||
+        f["是否团队主管"] === 1 ||
+        f["是否团队主管"] === "true" ||
+        (Array.isArray(f["是否团队主管"]) && f["是否团队主管"].length > 0),
+      department: readTextField(f, "部门"),
+      recordId: record.record_id,
+      updatedAt:
+        typeof f["更新时间"] === "number" ? (f["更新时间"] as number) : undefined,
+      isBootstrapped: !!(readTextField(f, "归属团队") || readTextField(f, "团队名称")),
+    };
+  });
+}
+
+export async function canReviewTeam(openId: string, team: string): Promise<boolean> {
+  const profile = await getUserProfile(openId);
+  return (
+    profile.role === "管理员" ||
+    (!!team && profile.team === team && profile.isTeamSupervisor)
+  );
 }

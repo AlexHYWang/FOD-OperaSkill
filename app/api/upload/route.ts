@@ -2,7 +2,7 @@
  * 文件上传路由
  * POST /api/upload
  * Content-Type: multipart/form-data
- * 字段：file (File), taskName (string), step (number), contentType (string)
+ * 字段：file (File), purpose? = skill | common
  */
 import { NextRequest, NextResponse } from "next/server";
 import { uploadFileToDrive } from "@/lib/feishu";
@@ -25,15 +25,23 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
+    const purpose = String(formData.get("purpose") || "common");
 
     if (!file) {
       return NextResponse.json({ error: "未收到文件" }, { status: 400 });
     }
 
-    // 文件大小限制：100MB
-    if (file.size > 100 * 1024 * 1024) {
+    const maxMB = purpose === "skill" ? 200 : 100;
+    if (purpose === "skill" && !file.name.toLowerCase().endsWith(".zip")) {
       return NextResponse.json(
-        { error: "文件大小超过 100MB，请将文件压缩为 .zip 后重试" },
+        { error: "SKILL 文件只允许上传 ZIP 包" },
+        { status: 400 }
+      );
+    }
+
+    if (file.size > maxMB * 1024 * 1024) {
+      return NextResponse.json(
+        { error: `文件大小超过 ${maxMB}MB，请压缩后重试` },
         { status: 400 }
       );
     }

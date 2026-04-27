@@ -18,6 +18,9 @@ import {
   AlertTriangle,
   Loader2,
   RefreshCw,
+  BookOpen,
+  FlaskConical,
+  UploadCloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
@@ -151,7 +154,7 @@ export default function HomePage() {
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold">
                 !
               </span>
-              第一次用？按这 3 步走
+              Skill 全链路工作台入口
             </h2>
           </div>
 
@@ -167,16 +170,40 @@ export default function HomePage() {
               },
               {
                 step: "2",
-                title: "Skill创建",
-                desc: "挑一个 ★纯线下 场景，按 4 步完成 Skill 创建",
-                href: "/section2",
-                icon: <Zap size={18} />,
-                tone: "purple",
+                title: "知识库管理",
+                desc: "提交规则、字典和模版，主管审核后发布当前版本",
+                href: "/knowledge",
+                icon: <BookOpen size={18} />,
+                tone: "indigo",
               },
               {
                 step: "3",
-                title: "看板 · 看大家的进展",
-                desc: "看其他团队做到哪一步了，自己的卡点顺手登记",
+                title: "SKILL上传",
+                desc: "为纯线下场景上传训练好的 SKILL ZIP 包",
+                href: "/section2",
+                icon: <UploadCloud size={18} />,
+                tone: "purple",
+              },
+              {
+                step: "4",
+                title: "评测集上传",
+                desc: "沉淀输入A样本和人工输出C结果，并说明覆盖范围",
+                href: "/evaluation",
+                icon: <FlaskConical size={18} />,
+                tone: "teal",
+              },
+              {
+                step: "5",
+                title: "财多多线下测试",
+                desc: "下载测试包，线下跑完后回传准确率和对比报告",
+                href: "/evaluation/test",
+                icon: <Zap size={18} />,
+                tone: "amber",
+              },
+              {
+                step: "6",
+                title: "AI进展看板",
+                desc: "查看知识库、SKILL、评测集和评测记录资产",
                 href: "/dashboard",
                 icon: <BarChart3 size={18} />,
                 tone: "emerald",
@@ -184,7 +211,10 @@ export default function HomePage() {
             ].map((s) => {
               const toneMap: Record<string, string> = {
                 blue: "bg-blue-50 text-blue-700 border-blue-200",
+                indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
                 purple: "bg-purple-50 text-purple-700 border-purple-200",
+                teal: "bg-teal-50 text-teal-700 border-teal-200",
+                amber: "bg-amber-50 text-amber-700 border-amber-200",
                 emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
               };
               return (

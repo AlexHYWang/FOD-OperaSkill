@@ -21,6 +21,11 @@ const TABLE_ENV_MAP: Record<string, string> = {
   "4": "FEISHU_TABLE4_ID",
   "5": "FEISHU_TABLE5_ID",
   "6": "FEISHU_TABLE6_ID",
+  "7": "FEISHU_TABLE7_ID",
+  "8": "FEISHU_TABLE8_ID",
+  "9": "FEISHU_TABLE9_ID",
+  "10": "FEISHU_TABLE10_ID",
+  "11": "FEISHU_TABLE11_ID",
 };
 
 function getTableConfig(tableNum: string) {
@@ -54,7 +59,7 @@ export async function GET(request: NextRequest) {
       filter = `AND(CurrentValue.[团队名称]="${team}",CurrentValue.[所属场景]="${taskName}")`;
     } else if (team && tableNum === "2") {
       filter = `CurrentValue.[团队名称]="${team}"`;
-    } else if (team && ["4", "5", "6"].includes(tableNum)) {
+    } else if (team && ["4", "5", "6", "7", "8", "10", "11"].includes(tableNum)) {
       // 看板表按团队名称过滤
       filter = `CurrentValue.[团队名称]="${team}"`;
     }

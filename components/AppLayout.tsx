@@ -12,6 +12,10 @@ import {
   Menu,
   X,
   BarChart3,
+  Home,
+  BookOpen,
+  FlaskConical,
+  UploadCloud,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TeamSelector } from "@/components/TeamSelector";
@@ -29,32 +33,42 @@ interface AppLayoutProps {
   user: UserInfo | null;
 }
 
-const NAV_ITEMS = [
+const NAV_GROUPS = [
   {
-    href: "/dashboard",
-    icon: <BarChart3 size={18} />,
-    label: "AI进展看板",
-    sublabel: "各团队场景进展汇总",
-    color: "text-emerald-600",
-    bg: "bg-emerald-50",
+    title: "概览",
+    items: [
+      { href: "/", icon: <Home size={18} />, label: "我的工作台", sublabel: "动态与待办", color: "text-slate-600", bg: "bg-slate-50" },
+      { href: "/dashboard", icon: <BarChart3 size={18} />, label: "AI进展看板", sublabel: "产出物与准确率", color: "text-emerald-600", bg: "bg-emerald-50" },
+    ],
   },
   {
-    href: "/section1",
-    icon: <LayoutGrid size={18} />,
-    label: "场景梳理",
-    sublabel: "把团队日常工作列成清单",
-    color: "text-blue-600",
-    bg: "bg-blue-50",
+    title: "梳理场景",
+    items: [
+      { href: "/section1", icon: <LayoutGrid size={18} />, label: "场景梳理", sublabel: "流程节点与场景卡", color: "text-blue-600", bg: "bg-blue-50" },
+    ],
   },
   {
-    href: "/section2",
-    icon: <Zap size={18} />,
-    label: "Skill创建",
-    sublabel: "把场景做成可复用的 AI Skill",
-    color: "text-purple-600",
-    bg: "bg-purple-50",
+    title: "知识管理",
+    items: [
+      { href: "/knowledge", icon: <BookOpen size={18} />, label: "知识库管理中心", sublabel: "提交 · 审核 · 发布", color: "text-indigo-600", bg: "bg-indigo-50" },
+    ],
+  },
+  {
+    title: "评测集管理",
+    items: [
+      { href: "/evaluation", icon: <FlaskConical size={18} />, label: "评测集上传", sublabel: "A样本 / 人工C结果", color: "text-teal-600", bg: "bg-teal-50" },
+      { href: "/evaluation/test", icon: <Zap size={18} />, label: "评测集测试", sublabel: "财多多线下回传", color: "text-amber-600", bg: "bg-amber-50" },
+    ],
+  },
+  {
+    title: "SKILL上传",
+    items: [
+      { href: "/section2", icon: <UploadCloud size={18} />, label: "SKILL上传", sublabel: "场景绑定 ZIP", color: "text-purple-600", bg: "bg-purple-50" },
+    ],
   },
 ];
+
+const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
 
 export function AppLayout({
   children,
@@ -155,40 +169,49 @@ export function AppLayout({
             <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">
               端到端流程 Skill 作业
             </div>
-            {NAV_ITEMS.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group",
-                    isActive
-                      ? `${item.bg} ${item.color} font-medium`
-                      : "text-gray-600 hover:bg-gray-100"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "p-1.5 rounded-md transition-colors",
-                      isActive ? item.bg : "bg-gray-100 group-hover:bg-gray-200",
-                      item.color
-                    )}
-                  >
-                    {item.icon}
-                  </div>
-                  <div>
-                    <div className="text-sm">{item.label}</div>
-                    <div className="text-xs text-gray-400 group-hover:text-gray-500">
-                      {item.sublabel}
-                    </div>
-                  </div>
-                  {isActive && (
-                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-current" />
-                  )}
-                </Link>
-              );
-            })}
+            {NAV_GROUPS.map((group) => (
+              <div key={group.title} className="space-y-1">
+                <div className="px-3 pt-3 pb-1 text-[11px] font-bold text-gray-400">
+                  {group.title}
+                </div>
+                {group.items.map((item) => {
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== "/" && pathname.startsWith(item.href));
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group",
+                        isActive
+                          ? `${item.bg} ${item.color} font-medium`
+                          : "text-gray-600 hover:bg-gray-100"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "p-1.5 rounded-md transition-colors",
+                          isActive ? item.bg : "bg-gray-100 group-hover:bg-gray-200",
+                          item.color
+                        )}
+                      >
+                        {item.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm truncate">{item.label}</div>
+                        <div className="text-xs text-gray-400 group-hover:text-gray-500 truncate">
+                          {item.sublabel}
+                        </div>
+                      </div>
+                      {isActive && (
+                        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-current" />
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </div>
 
           <div className="mt-auto p-4 border-t">
@@ -210,7 +233,9 @@ export function AppLayout({
             <aside className="fixed left-0 top-14 bottom-0 z-30 w-64 bg-white border-r shadow-xl md:hidden">
               <div className="p-4 space-y-1">
                 {NAV_ITEMS.map((item) => {
-                  const isActive = pathname === item.href;
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== "/" && pathname.startsWith(item.href));
                   return (
                     <Link
                       key={item.href}

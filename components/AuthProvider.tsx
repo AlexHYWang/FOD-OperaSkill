@@ -33,6 +33,7 @@ interface UserInfo {
 export interface UserProfileClient {
   team: string; // 归属团队（不可随意改）
   role: "管理员" | "普通用户" | "";
+  isTeamSupervisor: boolean;
   department: string;
   isBootstrapped: boolean;
 }
@@ -59,6 +60,7 @@ interface AuthContextType {
 const DEFAULT_PROFILE: UserProfileClient = {
   team: "",
   role: "",
+  isTeamSupervisor: false,
   department: "",
   isBootstrapped: false,
 };
@@ -125,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const p: UserProfileClient = {
           team: d.profile.team || "",
           role: d.profile.role || "",
+          isTeamSupervisor: !!d.profile.isTeamSupervisor,
           department: d.profile.department || "",
           isBootstrapped: !!d.profile.isBootstrapped,
         };
