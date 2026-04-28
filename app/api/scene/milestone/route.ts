@@ -108,7 +108,7 @@ export async function GET(request: Request) {
       }
       // 如果知识库绑定了该节点，该节点下所有场景视为完成 step1
       if (relNode) {
-        for (const [sceneKey, node] of sceneToNode.entries()) {
+        for (const [sceneKey, node] of Array.from(sceneToNode.entries())) {
           if (node === relNode) step1Scenes.add(sceneKey);
         }
       }
@@ -147,7 +147,7 @@ export async function GET(request: Request) {
 
     // 组装结果
     const milestones: Record<string, [boolean, boolean, boolean, boolean]> = {};
-    for (const sceneKey of allSceneKeys) {
+    for (const sceneKey of Array.from(allSceneKeys)) {
       const sceneName = sceneKeyToName.get(sceneKey) || sceneKey;
       milestones[sceneName] = [
         step1Scenes.has(sceneKey),
