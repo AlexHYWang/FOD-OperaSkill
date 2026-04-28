@@ -324,7 +324,7 @@ const TAX_SECTIONS: ProcessSection[] = [
 export const E2E_PROCESSES: E2EProcess[] = [
   {
     id: "ptp",
-    name: "PTP（含资金）",
+    name: "PTP（Purchase to Payment）",
     shortName: "PTP",
     color: "blue",
     sections: PTP_SECTIONS,

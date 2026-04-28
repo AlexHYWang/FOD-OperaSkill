@@ -23,15 +23,14 @@ import { useAuth } from "@/components/AuthProvider";
 
 interface InProgressItem {
   taskName: string;
-  lastStep: number;
   submittedAt: number;
 }
 
 interface HomeSummary {
   loggedIn: boolean;
-  recent7dMine: { section1Count: number; section2StepCount: number };
+  recent7dMine: { section1Count: number; skillSubmitCount: number };
   inProgress: InProgressItem[];
-  teamThisWeek: { stepCount: number; unresolvedBlockers: number; team: string };
+  teamThisWeek: { skillSubmitCount: number; unresolvedBlockers: number; team: string };
 }
 
 const STEPS = [
@@ -70,7 +69,7 @@ const STEPS = [
   {
     step: "5",
     title: "场景化 Skill 生产",
-    desc: "选场景 · 多步向导",
+    desc: "上传训练好的 SKILL",
     href: "/section2",
     icon: <UploadCloud size={18} />,
     tone: "purple",
@@ -220,23 +219,26 @@ function ActivityPanel({
           {loadingSummary ? (
             <div className="flex items-center gap-2 text-gray-400 text-sm py-2"><Loader2 size={14} className="animate-spin" /> 统计中…</div>
           ) : !summary?.recent7dMine ? (
-            <div className="text-sm text-gray-400">暂无数据</div>
+            <div className="flex flex-col items-center justify-center py-4 text-gray-300">
+              <div className="text-3xl mb-1">📋</div>
+              <div className="text-xs text-gray-400">暂无提交记录</div>
+            </div>
           ) : (
             <div className="space-y-1.5">
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-black text-blue-600">{summary.recent7dMine.section1Count}</span>
-                <span className="text-xs text-gray-500">条流程梳理</span>
+                <span className="text-xs text-gray-500">条场景梳理</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-purple-600">{summary.recent7dMine.section2StepCount}</span>
-                <span className="text-xs text-gray-500">个训练步骤</span>
+                <span className="text-2xl font-bold text-purple-600">{summary.recent7dMine.skillSubmitCount}</span>
+                <span className="text-xs text-gray-500">次 SKILL 提交</span>
               </div>
             </div>
           )}
         </div>
 
         {/* 进行中 */}
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border bg-white p-5 shadow-sm min-h-[140px]">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white">
               <Zap size={16} />
@@ -246,11 +248,11 @@ function ActivityPanel({
           {loadingSummary ? (
             <div className="flex items-center gap-2 text-gray-400 text-sm py-2"><Loader2 size={14} className="animate-spin" /> 查询中…</div>
           ) : (summary?.inProgress ?? []).length === 0 ? (
-            <div className="text-xs text-gray-400 leading-relaxed py-2">
-              还没有进行中的 Skill 生产
-              <br />
+            <div className="flex flex-col items-center justify-center py-2 text-center">
+              <div className="text-2xl mb-1">🎯</div>
+              <div className="text-xs text-gray-400 leading-relaxed">暂无进行中的场景</div>
               <button onClick={() => router.push("/section2")} className="mt-2 inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium text-xs">
-                去选场景，继续场景化生产 <ArrowRight size={12} />
+                前往 SKILL 生产 <ArrowRight size={12} />
               </button>
             </div>
           ) : (
@@ -258,41 +260,44 @@ function ActivityPanel({
               {(summary!.inProgress).map((it) => (
                 <button
                   key={it.taskName}
-                  onClick={() => router.push(`/section2?task=${encodeURIComponent(it.taskName)}`)}
+                  onClick={() => router.push(`/section2`)}
                   className="w-full text-left rounded-lg border border-purple-100 bg-purple-50/50 hover:bg-purple-50 hover:border-purple-200 px-3 py-2 transition-colors"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex-1 text-xs font-medium text-purple-900 truncate">{it.taskName}</div>
                     <span className="text-[11px] bg-white text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded-full font-semibold whitespace-nowrap">
-                      Step {it.lastStep}/4
+                      评测待达标
                     </span>
                   </div>
                 </button>
               ))}
-              <button onClick={() => router.push("/section2")} className="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1 font-medium">
-                继续场景化生产 <ArrowRight size={12} />
+              <button onClick={() => router.push("/evaluation/test")} className="text-xs text-purple-600 hover:text-purple-800 inline-flex items-center gap-1 font-medium">
+                前往评测集测试 <ArrowRight size={12} />
               </button>
             </div>
           )}
         </div>
 
-        {/* 本周团队 */}
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        {/* 本周团队动态 */}
+        <div className="rounded-2xl border bg-white p-5 shadow-sm min-h-[140px]">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white">
               <Users size={16} />
             </div>
-            <div className="text-sm font-semibold text-gray-700">本周团队 · AP</div>
+            <div className="text-sm font-semibold text-gray-700">本周团队动态</div>
           </div>
           {loadingSummary ? (
             <div className="flex items-center gap-2 text-gray-400 text-sm py-2"><Loader2 size={14} className="animate-spin" /> 统计中…</div>
           ) : !summary?.teamThisWeek ? (
-            <div className="text-sm text-gray-400">暂无数据</div>
+            <div className="flex flex-col items-center justify-center py-4 text-gray-300">
+              <div className="text-3xl mb-1">🏢</div>
+              <div className="text-xs text-gray-400">暂无团队数据</div>
+            </div>
           ) : (
             <div className="space-y-2">
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-emerald-600">{summary.teamThisWeek.stepCount}</span>
-                <span className="text-xs text-gray-500">个训练步骤</span>
+                <span className="text-3xl font-black text-emerald-600">{summary.teamThisWeek.skillSubmitCount}</span>
+                <span className="text-xs text-gray-500">次 SKILL 提交</span>
               </div>
               <div className={`flex items-center gap-1.5 text-xs rounded-lg px-2 py-1.5 ${summary.teamThisWeek.unresolvedBlockers > 0 ? "bg-amber-50 text-amber-800 border border-amber-200" : "bg-gray-50 text-gray-500 border border-gray-200"}`}>
                 <AlertTriangle size={12} className={summary.teamThisWeek.unresolvedBlockers > 0 ? "text-amber-600" : "text-gray-400"} />

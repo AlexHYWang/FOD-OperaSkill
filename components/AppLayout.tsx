@@ -59,13 +59,13 @@ const NAV_GROUPS = [
     title: "评测集管理",
     items: [
       { href: "/evaluation", icon: <FlaskConical size={18} />, label: "评测集管理中心", sublabel: "数据集 / 资料 / 评测运行", color: "text-teal-600", bg: "bg-teal-50" },
-      { href: "/evaluation/test", icon: <Zap size={18} />, label: "评测集测试", sublabel: "财多多线下回传", color: "text-amber-600", bg: "bg-amber-50" },
+      { href: "/evaluation/test", icon: <Zap size={18} />, label: "评测集测试", sublabel: "线下测试 · 结果回传", color: "text-amber-600", bg: "bg-amber-50" },
     ],
   },
   {
     title: "场景化 SKILL 生产",
     items: [
-      { href: "/section2", icon: <UploadCloud size={18} />, label: "场景化 Skill 生产", sublabel: "选场景 · 多步向导", color: "text-purple-600", bg: "bg-purple-50" },
+      { href: "/section2", icon: <UploadCloud size={18} />, label: "场景化 Skill 生产", sublabel: "上传训练好的 SKILL", color: "text-purple-600", bg: "bg-purple-50" },
     ],
   },
 ];

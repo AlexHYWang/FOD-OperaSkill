@@ -135,6 +135,7 @@ export function NodeMappingGrid({
 }: NodeMappingGridProps) {
   const [nodeTasksMap, setNodeTasksMap] = useState<Record<string, TaskRow[]>>({});
   const [progressMap, setProgressMap] = useState<ProgressMap>({});
+  const [milestoneMap, setMilestoneMap] = useState<Record<string, [boolean, boolean, boolean, boolean]>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saveStatus, setSaveStatus] = useState<Record<string, "success" | "error" | null>>({});
   const [loading, setLoading] = useState(false);
@@ -244,23 +245,30 @@ export function NodeMappingGrid({
       const prog: ProgressMap = {};
       const submittedNames = new Set<string>();
       if (r2.success) {
-        const stepsPerTask: Record<string, Set<number>> = {};
         for (const record of r2.records) {
           const taskName = record.fields["所属场景"] as string;
-          const step = record.fields["步骤编号"] as number;
           const status = record.fields["步骤状态"] as string;
           if (!taskName) continue;
           submittedNames.add(String(taskName).trim());
-          if (status !== "已完成") continue;
-          if (!stepsPerTask[taskName]) stepsPerTask[taskName] = new Set();
-          stepsPerTask[taskName].add(step);
-        }
-        for (const [name, steps] of Object.entries(stepsPerTask)) {
-          prog[name] = steps.size;
+          if (status === "已完成") {
+            prog[taskName] = (prog[taskName] || 0) + 1;
+          }
         }
       }
       setProgressMap(prog);
       setTasksWithSubmissions(submittedNames);
+
+      // 批量加载里程碑数据
+      try {
+        const msRes = await fetch(
+          `/api/scene/milestone?team=${encodeURIComponent(team)}&process=${encodeURIComponent(process.shortName)}`
+        ).then((r) => r.json());
+        if (msRes.success) {
+          setMilestoneMap(msRes.milestones || {});
+        }
+      } catch {
+        // 里程碑加载失败不影响主流程
+      }
     } catch (err) {
       console.error("加载失败:", err);
     } finally {
@@ -790,6 +798,7 @@ export function NodeMappingGrid({
                 processColor={process.color}
                 nodeTasksMap={nodeTasksMap}
                 progressMap={progressMap}
+                milestoneMap={milestoneMap}
                 saving={saving}
                 saveStatus={saveStatus}
                 onlyManual={onlyManual}
@@ -1570,6 +1579,7 @@ function SectionGroup({
   processColor,
   nodeTasksMap,
   progressMap,
+  milestoneMap,
   saving,
   saveStatus,
   onlyManual,
@@ -1591,6 +1601,7 @@ function SectionGroup({
   processColor: string;
   nodeTasksMap: Record<string, TaskRow[]>;
   progressMap: ProgressMap;
+  milestoneMap: Record<string, [boolean, boolean, boolean, boolean]>;
   saving: Record<string, boolean>;
   saveStatus: Record<string, "success" | "error" | null>;
   onlyManual: boolean;
@@ -1649,6 +1660,7 @@ function SectionGroup({
             isLastInSection={nIdx === visibleNodes.length - 1}
             tasks={nodeTasksMap[node.id] || []}
             progressMap={progressMap}
+            milestoneMap={milestoneMap}
             isSaving={saving[node.id] || false}
             saveStatus={saveStatus[node.id] || null}
             onlyManual={onlyManual}
@@ -1677,6 +1689,7 @@ function NodeColumn({
   isLastInSection,
   tasks,
   progressMap,
+  milestoneMap,
   saveStatus,
   onlyManual,
   readOnly,
@@ -1696,6 +1709,7 @@ function NodeColumn({
   isLastInSection: boolean;
   tasks: TaskRow[];
   progressMap: ProgressMap;
+  milestoneMap: Record<string, [boolean, boolean, boolean, boolean]>;
   isSaving: boolean;
   saveStatus: "success" | "error" | null;
   onlyManual: boolean;
@@ -1826,9 +1840,9 @@ function NodeColumn({
             <TaskCard
               key={task.id}
               task={task}
-              progress={
-                task.saved && task.label === "pure_manual"
-                  ? progressMap[task.taskName] ?? 0
+              milestones={
+                task.saved && task.label === "pure_manual" && task.taskName
+                  ? milestoneMap[task.taskName] ?? undefined
                   : undefined
               }
               readOnly={readOnly}
@@ -1870,9 +1884,16 @@ function NodeColumn({
 }
 
 // ─── 场景卡片（已保存态；编辑态由对话框负责，不再有内联编辑） ───
+const MILESTONE_STEPS = [
+  { label: "知识库", shortLabel: "知识库" },
+  { label: "评测集", shortLabel: "评测集" },
+  { label: "SKILL", shortLabel: "SKILL" },
+  { label: "评测达标", shortLabel: "达标" },
+];
+
 function TaskCard({
   task,
-  progress,
+  milestones,
   readOnly,
   hasSubmission,
   canDelete,
@@ -1883,7 +1904,7 @@ function TaskCard({
   onNavigate,
 }: {
   task: TaskRow;
-  progress?: number;
+  milestones?: [boolean, boolean, boolean, boolean];
   readOnly: boolean;
   hasSubmission: boolean;
   canDelete: boolean;
@@ -1893,8 +1914,37 @@ function TaskCard({
   onRequestDelete: () => void;
   onNavigate: () => void;
 }) {
+  const [showTimeline, setShowTimeline] = useState(false);
+  const router = useRouter();
   const labelOpt = TASK_LABELS.find((l) => l.value === task.label);
   const isPureManual = task.label === "pure_manual";
+
+  const completedCount = milestones ? milestones.filter(Boolean).length : 0;
+  const allDone = completedCount === 4;
+
+  // 第一个未完成步骤的跳转目标
+  function getNextHref() {
+    if (!milestones) return "/section2";
+    if (!milestones[0]) return "/knowledge";
+    if (!milestones[1]) return "/evaluation";
+    if (!milestones[2]) return "/section2";
+    if (!milestones[3]) return "/evaluation/test";
+    return "/dashboard";
+  }
+
+  const NEXT_LABELS = [
+    "前往知识库管理中心",
+    "前往评测集管理",
+    "前往 SKILL 生产",
+    "前往评测集测试",
+  ];
+
+  function getNextLabel() {
+    if (!milestones) return NEXT_LABELS[2];
+    const idx = milestones.findIndex((v) => !v);
+    if (idx === -1) return "查看场景资产（全部完成）";
+    return NEXT_LABELS[idx];
+  }
 
   return (
     <div
@@ -1932,19 +1982,20 @@ function TaskCard({
         >
           {task.taskName}
         </span>
-        {progress !== undefined && (
-          <span
-            className={cn(
-              "flex-shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap",
-              progress === 4
-                ? "bg-green-100 text-green-700 border border-green-200"
-                : progress > 0
-                ? "bg-blue-100 text-blue-700 border border-blue-200"
-                : "bg-gray-100 text-gray-500 border border-gray-200"
-            )}
-          >
-            {progress}/4
-          </span>
+        {/* 4步里程碑圆点指示器 */}
+        {milestones && (
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            {milestones.map((done, i) => (
+              <span
+                key={i}
+                title={MILESTONE_STEPS[i].label}
+                className={cn(
+                  "inline-block w-2 h-2 rounded-full",
+                  done ? "bg-emerald-500" : "bg-gray-300"
+                )}
+              />
+            ))}
+          </div>
         )}
         {!readOnly && task.saved && task.recordId && (
           <button
@@ -1971,7 +2022,12 @@ function TaskCard({
           </button>
         )}
       </div>
-      <div className="flex items-center justify-between gap-1">
+      <div className="flex items-center gap-1 flex-wrap">
+        {isPureManual && (
+          <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-600 text-white">
+            ★ 纯线下
+          </span>
+        )}
         {labelOpt && (
           <span
             className={cn(
@@ -1985,39 +2041,76 @@ function TaskCard({
           </span>
         )}
       </div>
-      <div className="flex flex-wrap gap-0.5 mt-1.5 min-h-[18px]">
+      <div className="flex flex-wrap items-center gap-0.5 mt-1.5 min-h-[18px]">
         {task.paradigms.length > 0 ? (
-          task.paradigms.map((pid) => {
-            const d = PARADIGM_DEFS.find((p) => p.id === pid);
-            return d ? (
-              <span
-                key={pid}
-                title={d.title}
-                className="text-[10px] leading-tight px-1 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200"
-              >
-                {d.shortLabel}
-              </span>
-            ) : null;
-          })
+          <>
+            <span className="text-[10px] text-gray-500 mr-0.5 shrink-0">所属范式：</span>
+            {task.paradigms.map((pid) => {
+              const d = PARADIGM_DEFS.find((p) => p.id === pid);
+              return d ? (
+                <span
+                  key={pid}
+                  title={d.title}
+                  className="text-[10px] leading-tight px-1 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200"
+                >
+                  {d.shortLabel}
+                </span>
+              ) : null;
+            })}
+          </>
         ) : (
           <span className="text-[10px] text-gray-400">范式未设</span>
         )}
       </div>
       {isPureManual && (
-        <button
-          type="button"
-          onClick={onNavigate}
-          title="为该场景上传 SKILL ZIP 包"
-          className={cn(
-            "mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg py-2 px-2",
-            "text-xs font-semibold text-white shadow-sm border border-orange-700",
-            "bg-orange-600 hover:bg-orange-700 active:bg-orange-800",
-            "transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-1"
+        <>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setShowTimeline((v) => !v); }}
+            title="查看该场景的四步里程碑进度"
+            className={cn(
+              "mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg py-1.5 px-2",
+              "text-xs font-semibold shadow-sm border",
+              allDone
+                ? "text-emerald-700 bg-emerald-50 border-emerald-300 hover:bg-emerald-100"
+                : "text-orange-700 bg-orange-100 border-orange-300 hover:bg-orange-200",
+              "transition-colors focus:outline-none"
+            )}
+          >
+            <span>场景进度</span>
+            <ArrowRight size={13} strokeWidth={2.5} className="flex-shrink-0" aria-hidden />
+          </button>
+          {showTimeline && (
+            <div className="mt-2 rounded-lg border border-gray-200 bg-white p-2 space-y-1.5">
+              {MILESTONE_STEPS.map((step, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className={cn(
+                    "w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold",
+                    milestones?.[i] ? "bg-emerald-500 text-white" : "bg-gray-200 text-gray-500"
+                  )}>
+                    {i + 1}
+                  </span>
+                  <span className={cn(
+                    "text-[11px] flex-1",
+                    milestones?.[i] ? "text-emerald-700 line-through" : "text-gray-700"
+                  )}>
+                    {step.label}
+                  </span>
+                  {milestones?.[i] && (
+                    <span className="text-[9px] text-emerald-600">✓</span>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); router.push(getNextHref()); }}
+                className="mt-1 w-full text-[10px] text-blue-600 hover:text-blue-800 text-center font-medium"
+              >
+                {getNextLabel()} →
+              </button>
+            </div>
           )}
-        >
-          <span>上传SKILL</span>
-          <ArrowRight size={16} strokeWidth={2.5} className="flex-shrink-0" aria-hidden />
-        </button>
+        </>
       )}
     </div>
   );

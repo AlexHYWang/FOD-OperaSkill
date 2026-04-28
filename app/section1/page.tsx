@@ -37,6 +37,7 @@ export default function Section1Page() {
     visibleTasks: 0,
     visibleNodes: 0,
   });
+  const [processCounts, setProcessCounts] = useState<Record<string, { total: number; manual: number }>>({});
 
   const [showHint, setShowHint] = useState(false);
   const filterBarRef = useRef<HTMLDivElement>(null);
@@ -44,6 +45,14 @@ export default function Section1Page() {
   useEffect(() => {
     if (!loading && !isLoggedIn) router.push("/");
   }, [loading, isLoggedIn, router]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !team) return;
+    fetch(`/api/scene/counts?team=${encodeURIComponent(team)}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setProcessCounts(d.counts); })
+      .catch(() => {});
+  }, [isLoggedIn, team]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -259,16 +268,28 @@ export default function Section1Page() {
                   key={proc.id}
                   onClick={() => setActiveProcess(proc.id)}
                   className={cn(
-                    "relative px-5 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap",
+                    "relative px-5 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap flex items-center gap-1.5",
                     isActive
                       ? `${colors.active} border-b-2`
                       : `text-gray-500 border-transparent ${colors.tab}`
                   )}
                 >
-                  <span className="font-bold mr-1">{proc.shortName}</span>
+                  <span className="font-bold">{proc.shortName}</span>
                   {proc.id !== proc.shortName.toLowerCase() && (
                     <span className="text-xs opacity-70 hidden lg:inline">
                       {proc.name.replace(proc.shortName, "").trim()}
+                    </span>
+                  )}
+                  {processCounts[proc.id] !== undefined && (
+                    <span className={cn(
+                      "ml-0.5 inline-flex items-center justify-center rounded-full text-[10px] font-semibold px-1.5 min-w-[18px] h-[18px]",
+                      isActive
+                        ? "bg-white/60 text-current"
+                        : "bg-gray-100 text-gray-500"
+                    )}>
+                      {onlyManual
+                        ? (processCounts[proc.id]?.manual ?? 0)
+                        : (processCounts[proc.id]?.total ?? 0)}
                     </span>
                   )}
                 </button>
