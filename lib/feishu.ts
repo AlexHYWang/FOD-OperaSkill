@@ -588,6 +588,25 @@ export async function sendFeishuTextMessage(
   return data.data;
 }
 
+export async function sendFeishuCardMessage(
+  receiveId: string,
+  card: Record<string, unknown>,
+  receiveIdType: "open_id" | "user_id" | "email" = "open_id"
+) {
+  const query = new URLSearchParams({ receive_id_type: receiveIdType });
+  const res = await feishuFetch(`/im/v1/messages?${query}`, {
+    method: "POST",
+    body: JSON.stringify({
+      receive_id: receiveId,
+      msg_type: "interactive",
+      content: JSON.stringify(card),
+    }),
+  });
+  const data = await res.json();
+  if (data.code !== 0) throw new Error(`发送飞书卡片消息失败: ${data.msg}`);
+  return data.data;
+}
+
 // ─────────────────────────────────────────────
 // 获取所有记录（自动分页）
 // ─────────────────────────────────────────────

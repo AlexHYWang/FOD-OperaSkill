@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addRecord, getAllRecords, sendFeishuTextMessage } from "@/lib/feishu";
+import { addRecord, getAllRecords, sendFeishuCardMessage } from "@/lib/feishu";
 import { getSession } from "@/lib/session";
 import { asString, makeBitableFilter } from "@/lib/record-utils";
 import { canReviewTeam, getAllUserProfiles } from "@/lib/user-profile";
+
+const EVALUATION_TABLE_LINK =
+  "https://www.xiaomifod-skill.cn/evaluation";
+
+function formatDateTime(ts: number) {
+  if (!Number.isFinite(ts) || ts <= 0) return "-";
+  return new Date(ts).toLocaleString("zh-CN", { hour12: false });
+}
 
 function config() {
   const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
@@ -52,17 +60,48 @@ export async function POST(req: NextRequest) {
 
     let messageStatus = "已发送";
     const link = process.env.HTTP_LINK || "";
+    const senderName = asString(session.user.name) || "系统用户";
+    const now = Date.now();
     try {
-      await sendFeishuTextMessage(
-        targetOpenId,
-        `【FOD OperaSkill 评测集催办】请补充场景「${scene}」的评测集。\n覆盖范围：${coverage}\n上传入口：${link}`
-      );
+      const card = {
+        config: { wide_screen_mode: true, enable_forward: true },
+        header: {
+          template: "blue",
+          title: { tag: "plain_text", content: "FOD OperaSkill｜评测集催办" },
+        },
+        elements: [
+          {
+            tag: "markdown",
+            content: [
+              `📌 **请补充场景**：${scene} 的评测集资料`,
+              `🧭 **覆盖范围**：${coverage}`,
+              `🙋 **发起人**：${senderName}`,
+              `🕒 **发起时间**：${formatDateTime(now)}`,
+            ].join("\n"),
+          },
+          { tag: "hr" },
+          {
+            tag: "action",
+            actions: [
+              {
+                tag: "button",
+                text: { tag: "plain_text", content: "去补充评测集资料" },
+                type: "primary",
+                url: EVALUATION_TABLE_LINK,
+              },
+            ],
+          },
+          link
+            ? { tag: "note", elements: [{ tag: "plain_text", content: `系统入口：${link}` }] }
+            : null,
+        ].filter(Boolean),
+      };
+      await sendFeishuCardMessage(targetOpenId, card as Record<string, unknown>);
     } catch (err) {
       console.warn("[evaluation/reminders] 飞书消息发送失败，仅记录:", err);
       messageStatus = "发送失败";
     }
 
-    const now = Date.now();
     const record = await addRecord(appToken, tableId, {
       被催办人: [{ id: targetOpenId }],
       发起人: [{ id: session.user.open_id }],

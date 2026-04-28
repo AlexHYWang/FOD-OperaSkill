@@ -214,13 +214,13 @@ export function OutputsAccuracySection({ team, isAdmin }: Props) {
       }
     }
 
-    for (const card of map.values()) {
+    map.forEach((card) => {
       const prefix = `${card.team}::${card.scene}::`;
       card.latestAccuracyByDataset = Array.from(latestRunByDataset.entries())
         .filter(([k]) => k.startsWith(prefix))
         .map(([, v]) => v)
         .sort((a, b) => b.submittedAt - a.submittedAt);
-    }
+    });
 
     return Array.from(map.values()).sort((a, b) => a.scene.localeCompare(b.scene, "zh"));
   }, [table1Records, table2Records, knowledgeRecords, datasetRecords, runRecords]);

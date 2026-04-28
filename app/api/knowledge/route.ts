@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addRecord, getAllRecords, sendFeishuTextMessage, updateRecord } from "@/lib/feishu";
+import { addRecord, getAllRecords, sendFeishuCardMessage, updateRecord } from "@/lib/feishu";
 import { getSession } from "@/lib/session";
 import { asBoolean, asString, extractPersonNames, extractUrl, makeBitableFilter } from "@/lib/record-utils";
 import { canReviewTeam } from "@/lib/user-profile";
 import { normalizeE2EProcessShortName } from "@/lib/constants";
+
+const KNOWLEDGE_TABLE_LINK =
+  "https://www.xiaomifod-skill.cn/knowledge";
+
+function formatDateTime(ts: number) {
+  if (!Number.isFinite(ts) || ts <= 0) return "-";
+  return new Date(ts).toLocaleString("zh-CN", { hour12: false });
+}
 
 function getConfig() {
   const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
@@ -189,6 +197,8 @@ export async function PATCH(req: NextRequest) {
         const title = asString(current.fields["条目标题"]);
         const version = asString(current.fields["版本号"]) || "v1.0";
         const submitterOpenId = asString(current.fields["提交人open_id"] || current.fields["提交者open_id"] || "");
+        const submitterNames = extractPersonNames(current.fields["提交者"]);
+        const submitterName = submitterNames[0] || "同学";
         // 若有 person 类型的提交者字段，尝试提取第一个 open_id
         const submitterPersonField = current.fields["提交者"];
         let finalOpenId = submitterOpenId;
@@ -197,11 +207,44 @@ export async function PATCH(req: NextRequest) {
           finalOpenId = first?.id || first?.open_id || "";
         }
         if (finalOpenId) {
-          const msg =
-            action === "publish"
-              ? `您提交的知识库《${title}》已通过审核并发布（${version}），现已生效。`
-              : `您提交的知识库《${title}》审核未通过，退回原因：${asString(body.rejectReason || "未说明")}，请修改后重新提交。`;
-          await sendFeishuTextMessage(finalOpenId, msg);
+          const resultText = action === "publish" ? "已通过并发布" : "已退回";
+          const effectiveText = action === "publish" ? "已生效" : "未生效";
+          const card = {
+            config: { wide_screen_mode: true, enable_forward: true },
+            header: {
+              template: action === "publish" ? "green" : "orange",
+              title: { tag: "plain_text", content: "FOD OperaSkill｜知识库审核结果" },
+            },
+            elements: [
+              {
+                tag: "markdown",
+                content: [
+                  `👋 **你好**：${submitterName}`,
+                  `📚 **你提交的知识库条目**：《${title}》`,
+                  `✅ **审核结果**：${resultText}`,
+                  `🏷️ **版本**：${version}`,
+                  `⚙️ **生效状态**：${effectiveText}`,
+                  `🕒 **审核时间**：${formatDateTime(now)}`,
+                  action === "reject" ? `📝 **退回原因**：${asString(body.rejectReason || "未说明")}` : "",
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              },
+              { tag: "hr" },
+              {
+                tag: "action",
+                actions: [
+                  {
+                    tag: "button",
+                    text: { tag: "plain_text", content: "查看知识库条目明细" },
+                    type: "primary",
+                    url: KNOWLEDGE_TABLE_LINK,
+                  },
+                ],
+              },
+            ],
+          };
+          await sendFeishuCardMessage(finalOpenId, card);
         }
       } catch (notifyErr) {
         console.warn("[knowledge] 飞书消息通知失败（不影响主流程）:", notifyErr);
