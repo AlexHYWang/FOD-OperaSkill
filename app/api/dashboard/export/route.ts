@@ -32,6 +32,17 @@ function buildLinkNotePath(path: string, title: string) {
   return `${folder}${baseTitle}_请用记事本打开查看文件链接.txt`;
 }
 
+function extractDriveTokenFromUrl(url: string): string {
+  const val = (url || "").trim();
+  if (!val) return "";
+  // 兼容常见飞书文件链接：.../file/<token> 或 ?file_token=<token>
+  const byPath = val.match(/\/file\/([a-zA-Z0-9]+)\b/);
+  if (byPath?.[1]) return byPath[1];
+  const byQuery = val.match(/[?&]file_token=([a-zA-Z0-9]+)/);
+  if (byQuery?.[1]) return byQuery[1];
+  return "";
+}
+
 async function addFile(zip: JSZip, path: string, token: string, url: string, titleForLink: string) {
   if (token) {
     try {
@@ -191,19 +202,25 @@ export async function GET(req: NextRequest) {
     for (const rec of runs) {
       const f = rec.fields;
       const outputName = asString(f["机器输出C结果文件名"]) || `${rec.record_id}.txt`;
+      const outputUrl = extractUrl(f["机器输出C结果链接"]);
+      const outputToken =
+        asString(f["机器输出C结果文件Token"]) || extractDriveTokenFromUrl(outputUrl);
       await addFile(
         zip,
         `${root}/评测记录/机器输出C结果/${safeName(outputName)}`,
-        "",
-        extractUrl(f["机器输出C结果链接"]),
+        outputToken,
+        outputUrl,
         outputName
       );
       const reportName = asString(f["对比分析报告文件名"]) || `${rec.record_id}.txt`;
+      const reportUrl = extractUrl(f["对比分析报告链接"]);
+      const reportToken =
+        asString(f["对比分析报告文件Token"]) || extractDriveTokenFromUrl(reportUrl);
       await addFile(
         zip,
         `${root}/评测记录/对比分析报告/${safeName(reportName)}`,
-        "",
-        extractUrl(f["对比分析报告链接"]),
+        reportToken,
+        reportUrl,
         reportName
       );
     }

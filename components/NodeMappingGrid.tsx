@@ -1982,20 +1982,20 @@ function TaskCard({
         >
           {task.taskName}
         </span>
-        {/* 4步里程碑圆点指示器 */}
         {milestones && (
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            {milestones.map((done, i) => (
-              <span
-                key={i}
-                title={MILESTONE_STEPS[i].label}
-                className={cn(
-                  "inline-block w-2 h-2 rounded-full",
-                  done ? "bg-emerald-500" : "bg-gray-300"
-                )}
-              />
-            ))}
-          </div>
+          <span
+            className={cn(
+              "flex-shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap border",
+              completedCount === 4
+                ? "bg-green-100 text-green-700 border-green-200"
+                : completedCount > 0
+                ? "bg-blue-100 text-blue-700 border-blue-200"
+                : "bg-gray-100 text-gray-500 border-gray-200"
+            )}
+            title="场景四步里程碑完成进度"
+          >
+            {completedCount}/4
+          </span>
         )}
         {!readOnly && task.saved && task.recordId && (
           <button
@@ -2028,7 +2028,7 @@ function TaskCard({
             ★ 纯线下
           </span>
         )}
-        {labelOpt && (
+        {labelOpt && !isPureManual && (
           <span
             className={cn(
               "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium border",
@@ -2051,7 +2051,7 @@ function TaskCard({
                 <span
                   key={pid}
                   title={d.title}
-                  className="text-[10px] leading-tight px-1 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200"
+                  className="text-[10px] leading-tight px-0.5 py-0 text-slate-700"
                 >
                   {d.shortLabel}
                 </span>

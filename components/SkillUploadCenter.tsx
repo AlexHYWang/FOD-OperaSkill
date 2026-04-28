@@ -6,7 +6,11 @@ import {
 } from "lucide-react";
 import { FileUploader, type UploadedFile } from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
-import { E2E_PROCESSES, feishuLabelIsPureManual } from "@/lib/constants";
+import {
+  E2E_PROCESSES,
+  feishuLabelIsPureManual,
+  normalizeE2EProcessShortName,
+} from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 interface TaskItem {
@@ -40,10 +44,23 @@ const PROCESS_COLORS: Record<string, { tab: string; active: string }> = {
   tax: { tab: "hover:text-red-600 hover:border-red-400", active: "text-red-700 border-red-600 bg-red-50" },
 };
 
+function uniqueProcessIdBySection(sectionName: string): string {
+  if (!sectionName) return "";
+  const matches = E2E_PROCESSES.filter((proc) =>
+    proc.sections.some((s) => s.name === sectionName)
+  );
+  return matches.length === 1 ? matches[0].id : "";
+}
+
 function processIdFrom(raw: string, sectionName: string) {
-  for (const proc of E2E_PROCESSES) {
-    if (raw === proc.shortName || raw === proc.name || raw === proc.id) return proc.id;
-    if (proc.sections.some((s) => s.name === sectionName)) return proc.id;
+  const normalizedShort = normalizeE2EProcessShortName((raw || "").trim());
+  if (normalizedShort) {
+    const byShort = E2E_PROCESSES.find((p) => p.shortName === normalizedShort);
+    if (byShort) return byShort.id;
+  }
+  // 仅在流程字段为空时，按环节做“唯一映射”兜底，避免误判到错误流程
+  if (!(raw || "").trim()) {
+    return uniqueProcessIdBySection(sectionName);
   }
   return "";
 }
@@ -76,15 +93,26 @@ export function SkillUploadCenter({ team, userName, readOnly = false }: Props) {
           const nodeName = String(rec.fields["流程节点"] || "");
           const label = String(rec.fields["标签"] || "");
           const e2e = String(rec.fields["端到端流程"] || "");
-          if (!taskName || seen.has(taskName) || !feishuLabelIsPureManual(label)) continue;
-          seen.add(taskName);
+          if (!taskName || !feishuLabelIsPureManual(label)) continue;
           const processId = processIdFrom(e2e, sectionName);
+          if (!processId) continue;
+          const dedupeKey = `${processId}::${taskName}`;
+          if (seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
           const processDef = E2E_PROCESSES.find((p) => p.id === processId);
           const processName = processDef?.name || e2e || "未分类流程";
-          const processShortName = processDef?.shortName || e2e || "";
+          const processShortName = processDef?.shortName || normalizeE2EProcessShortName(e2e) || "";
           next.push({ taskName, sectionName, nodeName, label, processId, processName, processShortName });
         }
         setTasks(next);
+        // 默认流程Tab：优先落到“当前团队有场景数据”的第一个流程；若无则回退 PTP
+        const firstProcessWithScene = E2E_PROCESSES.find((p) =>
+          next.some((t) => t.processId === p.id)
+        )?.id;
+        setActiveProcessId((prev) => {
+          if (prev && next.some((t) => t.processId === prev)) return prev;
+          return firstProcessWithScene || "ptp";
+        });
       }
       if (r2.success) {
         const latestMap: Record<string, SkillRecord> = {};

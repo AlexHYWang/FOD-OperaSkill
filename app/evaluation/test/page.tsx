@@ -6,7 +6,7 @@ import {
   ChevronRight, Download, FlaskConical, Loader2, Search, UploadCloud, X,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
-import { FileUploader, type UploadedFile } from "@/components/FileUploader";
+import { MultiFileUploader, type UploadedFile } from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
 import { cn } from "@/lib/utils";
@@ -252,8 +252,8 @@ function RunUploadModal({
   scene: string;
   onClose: () => void;
 }) {
-  const [outputFile, setOutputFile] = useState<UploadedFile | null>(null);
-  const [reportFile, setReportFile] = useState<UploadedFile | null>(null);
+  const [outputFiles, setOutputFiles] = useState<UploadedFile[]>([]);
+  const [reportFiles, setReportFiles] = useState<UploadedFile[]>([]);
   const [accuracy, setAccuracy] = useState("");
   const [remark, setRemark] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -298,10 +298,16 @@ function RunUploadModal({
         body: JSON.stringify({
           team, scene,
           datasetId: dataset.id,
-          outputFileName: outputFile?.file_name,
-          outputFileUrl: outputFile?.url,
-          reportFileName: reportFile?.file_name,
-          reportFileUrl: reportFile?.url,
+          outputFiles: outputFiles.map((f) => ({
+            file_name: f.file_name,
+            url: f.url,
+            file_token: f.file_token,
+          })),
+          reportFiles: reportFiles.map((f) => ({
+            file_name: f.file_name,
+            url: f.url,
+            file_token: f.file_token,
+          })),
           accuracy: Number(accuracy),
           skillVersion: skillVersion || "",
           knowledgeVersion: knowledgeVersion || "",
@@ -358,8 +364,20 @@ function RunUploadModal({
             </div>
           </div>
 
-          <FileUploader label="财多多机器输出C结果 *" uploaded={outputFile} onUpload={setOutputFile} required />
-          <FileUploader label="对比分析报告 *" uploaded={reportFile} onUpload={setReportFile} required />
+          <MultiFileUploader
+            label="财多多机器输出C结果 *"
+            hint="可上传多个文件"
+            uploaded={outputFiles}
+            onUpload={setOutputFiles}
+            required
+          />
+          <MultiFileUploader
+            label="对比分析报告 *"
+            hint="可上传多个文件"
+            uploaded={reportFiles}
+            onUpload={setReportFiles}
+            required
+          />
           <div className="space-y-1">
             <div className="text-xs text-gray-600">准确率(%) *</div>
             <input
@@ -387,7 +405,7 @@ function RunUploadModal({
           <Button variant="outline" onClick={onClose}>取消</Button>
           <Button
             onClick={submit}
-            disabled={!outputFile || !reportFile || !accuracy || submitting}
+            disabled={outputFiles.length === 0 || reportFiles.length === 0 || !accuracy || submitting}
             className="bg-amber-600 hover:bg-amber-700"
           >
             {submitting ? <><Loader2 size={14} className="animate-spin mr-1" />提交中…</> : "提交测评结果"}

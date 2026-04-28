@@ -47,6 +47,10 @@ function asString(value: unknown) {
   return String(value);
 }
 
+function normalizeText(value: unknown) {
+  return asString(value).replace(/\s+/g, " ").trim();
+}
+
 function FilterSelect({
   label,
   value,
@@ -147,6 +151,7 @@ export function OutputsAccuracySection({ team, isAdmin }: Props) {
       return map.get(key)!;
     };
 
+    const sceneNodeMap = new Map<string, string>(); // key=team::scene -> node
     for (const rec of table1Records) {
       const teamName = asString(rec.fields["团队名称"]);
       const scene = asString(rec.fields["场景名称"] || rec.fields["任务名称"]);
@@ -155,16 +160,55 @@ export function OutputsAccuracySection({ team, isAdmin }: Props) {
       card.process = asString(rec.fields["端到端流程"]);
       card.section = asString(rec.fields["流程环节"]);
       card.node = asString(rec.fields["流程节点"]);
+      sceneNodeMap.set(
+        `${normalizeText(teamName)}::${normalizeText(scene)}`,
+        normalizeText(rec.fields["流程节点"] || rec.fields["节点"])
+      );
     }
     for (const rec of table2Records) {
       const teamName = asString(rec.fields["团队名称"]);
       const scene = asString(rec.fields["所属场景"] || rec.fields["关联任务"]);
       if (teamName && scene) ensure(teamName, scene).skills += 1;
     }
+    // 知识库计数与下载资产包口径保持一致：
+    // 1) 仅统计已发布且当前版本
+    // 2) 命中规则 = 关联场景名匹配 OR（绑定范围=节点 且 节点=场景所属节点）
+    const knowledgeSeen = new Set<string>();
     for (const rec of knowledgeRecords) {
       const teamName = asString(rec.fields["团队名称"]);
-      const scene = asString(rec.fields["关联场景名"]);
-      if (teamName && scene) ensure(teamName, scene).knowledge += 1;
+      if (!teamName) continue;
+      const status = normalizeText(rec.fields["状态"]);
+      const isCurrent = rec.fields["是否当前版本"] === true || String(rec.fields["是否当前版本"]).toLowerCase() === "true";
+      if (status !== "已发布" || !isCurrent) continue;
+
+      const bindScope = normalizeText(rec.fields["绑定范围"]) || "场景";
+      const relScene = normalizeText(rec.fields["关联场景名"]);
+      const recNode = normalizeText(
+        rec.fields["流程节点"] || rec.fields["节点"] || rec.fields["关联节点"]
+      );
+
+      if (bindScope === "节点" && recNode) {
+        for (const card of Array.from(map.values())) {
+          if (normalizeText(card.team) !== normalizeText(teamName)) continue;
+          const sceneKey = `${normalizeText(card.team)}::${normalizeText(card.scene)}`;
+          const sceneNode = sceneNodeMap.get(sceneKey) || normalizeText(card.node);
+          if (sceneNode && sceneNode === recNode) {
+            const dedupeKey = `${card.key}::${rec.id}`;
+            if (knowledgeSeen.has(dedupeKey)) continue;
+            knowledgeSeen.add(dedupeKey);
+            card.knowledge += 1;
+          }
+        }
+      } else if (relScene) {
+        for (const card of Array.from(map.values())) {
+          if (normalizeText(card.team) !== normalizeText(teamName)) continue;
+          if (normalizeText(card.scene) !== relScene) continue;
+          const dedupeKey = `${card.key}::${rec.id}`;
+          if (knowledgeSeen.has(dedupeKey)) continue;
+          knowledgeSeen.add(dedupeKey);
+          card.knowledge += 1;
+        }
+      }
     }
     for (const rec of datasetRecords) {
       const teamName = asString(rec.fields["团队名称"]);

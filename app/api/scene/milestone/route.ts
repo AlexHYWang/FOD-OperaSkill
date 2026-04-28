@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 import { getAllRecords } from "@/lib/feishu";
 import { getSession } from "@/lib/session";
 import { getUserProfile } from "@/lib/user-profile";
+import { normalizeE2EProcessShortName } from "@/lib/constants";
 
 function asString(v: unknown): string {
   if (typeof v === "string") return v;
@@ -36,10 +37,14 @@ function asString(v: unknown): string {
   return "";
 }
 
+function normalizeText(v: unknown): string {
+  return asString(v).replace(/\s+/g, " ").trim();
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const teamParam = searchParams.get("team");
-  const processParam = searchParams.get("process"); // shortName like "PTP"
+  const processParam = normalizeE2EProcessShortName(searchParams.get("process") || "");
 
   const session = await getSession();
   if (!session.isLoggedIn || !session.user) {
@@ -67,45 +72,44 @@ export async function GET(request: Request) {
 
     const teamFilter = `CurrentValue.[团队名称]="${team}"`;
 
-    // 获取该流程的所有场景名（从 Table1）
-    const filterParts: string[] = [`CurrentValue.[团队名称]="${team}"`];
-    if (processParam) {
-      filterParts.push(`CurrentValue.[端到端流程]="${processParam}"`);
-    }
-    const t1Filter = filterParts.join(" AND ");
-
     const [t1Records, t2Records, t7Records, t8Records, t11Records] = await Promise.all([
-      getAllRecords(appToken, table1Id, t1Filter),
+      getAllRecords(appToken, table1Id, teamFilter),
       teamFilter ? getAllRecords(appToken, table2Id, teamFilter) : Promise.resolve([]),
       table7Id ? getAllRecords(appToken, table7Id, teamFilter) : Promise.resolve([]),
       table8Id ? getAllRecords(appToken, table8Id, teamFilter) : Promise.resolve([]),
       table11Id ? getAllRecords(appToken, table11Id, teamFilter) : Promise.resolve([]),
     ]);
 
-    // 提取场景名集合（Table1）
-    const allScenes = new Set<string>();
-    const sceneToNode = new Map<string, string>(); // taskName -> nodeName
+    // 提取场景名集合（Table1）并统一 key，避免空格/全角差异导致不命中
+    const allSceneKeys = new Set<string>();
+    const sceneKeyToName = new Map<string, string>(); // normalized scene -> original name
+    const sceneToNode = new Map<string, string>(); // normalized scene -> normalized node
     for (const r of t1Records) {
-      const name = asString(r.fields["场景名称"] || r.fields["任务名称"]);
-      if (name) {
-        allScenes.add(name);
-        const node = asString(r.fields["流程节点"]);
-        if (node) sceneToNode.set(name, node);
-      }
+      const tableProcess = normalizeE2EProcessShortName(
+        normalizeText(r.fields["端到端流程"])
+      );
+      if (processParam && tableProcess !== processParam) continue;
+      const name = normalizeText(r.fields["场景名称"] || r.fields["任务名称"]);
+      if (!name) continue;
+      const sceneKey = name;
+      allSceneKeys.add(sceneKey);
+      sceneKeyToName.set(sceneKey, name);
+      const node = normalizeText(r.fields["流程节点"]);
+      if (node) sceneToNode.set(sceneKey, node);
     }
 
     // Step1: 知识库绑定 - Table7 中有该场景名或所属节点
-    const step1Scenes = new Set<string>();
+    const step1Scenes = new Set<string>(); // normalized scene
     for (const r of t7Records) {
-      const relScene = asString(r.fields["关联场景名"] || r.fields["所属场景"]);
-      const relNode = asString(r.fields["流程节点"] || r.fields["所属节点"]);
-      if (relScene && allScenes.has(relScene)) {
+      const relScene = normalizeText(r.fields["关联场景名"] || r.fields["所属场景"]);
+      const relNode = normalizeText(r.fields["流程节点"] || r.fields["所属节点"]);
+      if (relScene && allSceneKeys.has(relScene)) {
         step1Scenes.add(relScene);
       }
       // 如果知识库绑定了该节点，该节点下所有场景视为完成 step1
       if (relNode) {
-        for (const [scene, node] of sceneToNode.entries()) {
-          if (node === relNode) step1Scenes.add(scene);
+        for (const [sceneKey, node] of sceneToNode.entries()) {
+          if (node === relNode) step1Scenes.add(sceneKey);
         }
       }
     }
@@ -113,8 +117,8 @@ export async function GET(request: Request) {
     // Step2: 评测集绑定 - Table8 中有关联场景名匹配
     const step2Scenes = new Set<string>();
     for (const r of t8Records) {
-      const relScene = asString(r.fields["关联场景名"] || r.fields["所属场景"]);
-      if (relScene && allScenes.has(relScene)) {
+      const relScene = normalizeText(r.fields["关联场景名"] || r.fields["所属场景"]);
+      if (relScene && allSceneKeys.has(relScene)) {
         step2Scenes.add(relScene);
       }
     }
@@ -122,10 +126,10 @@ export async function GET(request: Request) {
     // Step3: SKILL 上传 - Table2 中有步骤状态=已完成
     const step3Scenes = new Set<string>();
     for (const r of t2Records) {
-      const status = asString(r.fields["步骤状态"]);
+      const status = normalizeText(r.fields["步骤状态"]);
       if (status !== "已完成") continue;
-      const scene = asString(r.fields["所属场景"]);
-      if (scene && allScenes.has(scene)) {
+      const scene = normalizeText(r.fields["所属场景"]);
+      if (scene && allSceneKeys.has(scene)) {
         step3Scenes.add(scene);
       }
     }
@@ -135,22 +139,33 @@ export async function GET(request: Request) {
     for (const r of t11Records) {
       const accuracy = Number(r.fields["准确率(%)"] || 0);
       if (accuracy < 100) continue;
-      const scene = asString(r.fields["关联场景名"] || r.fields["所属场景"]);
-      if (scene && allScenes.has(scene)) {
+      const scene = normalizeText(r.fields["关联场景名"] || r.fields["所属场景"]);
+      if (scene && allSceneKeys.has(scene)) {
         step4Scenes.add(scene);
       }
     }
 
     // 组装结果
     const milestones: Record<string, [boolean, boolean, boolean, boolean]> = {};
-    for (const scene of allScenes) {
-      milestones[scene] = [
-        step1Scenes.has(scene),
-        step2Scenes.has(scene),
-        step3Scenes.has(scene),
-        step4Scenes.has(scene),
+    for (const sceneKey of allSceneKeys) {
+      const sceneName = sceneKeyToName.get(sceneKey) || sceneKey;
+      milestones[sceneName] = [
+        step1Scenes.has(sceneKey),
+        step2Scenes.has(sceneKey),
+        step3Scenes.has(sceneKey),
+        step4Scenes.has(sceneKey),
       ];
     }
+
+    console.info("[scene/milestone] computed", {
+      team,
+      process: processParam || "ALL",
+      scenes: allSceneKeys.size,
+      step1: step1Scenes.size,
+      step2: step2Scenes.size,
+      step3: step3Scenes.size,
+      step4: step4Scenes.size,
+    });
 
     return NextResponse.json({ success: true, milestones });
   } catch (err) {

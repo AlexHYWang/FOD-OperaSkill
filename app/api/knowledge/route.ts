@@ -191,6 +191,19 @@ export async function PATCH(req: NextRequest) {
     }
     await updateRecord(appToken, tableId, recordId, fields);
 
+    // 发布后做一次幂等校验，避免个别资料类型（如模版）出现“已发布但未勾选当前版本”的偶发写入偏差
+    if (action === "publish") {
+      const refreshed = (await getAllRecords(appToken, tableId)).find(
+        (r) => r.record_id === recordId
+      );
+      const isCurrentAfterPublish = refreshed
+        ? asBoolean(refreshed.fields["是否当前版本"])
+        : false;
+      if (!isCurrentAfterPublish) {
+        await updateRecord(appToken, tableId, recordId, { 是否当前版本: true });
+      }
+    }
+
     // ⑪ 审核后通知提交人（发布 / 退回）
     if (action === "publish" || action === "reject") {
       try {
