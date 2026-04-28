@@ -15,8 +15,10 @@ import {
   Lock,
   Trash2,
   ShieldCheck,
+  UploadCloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FileUploader, type UploadedFile } from "@/components/FileUploader";
 import { cn } from "@/lib/utils";
 import {
   TASK_LABELS,
@@ -159,6 +161,15 @@ export function NodeMappingGrid({
   const batchTextRef = useRef<HTMLTextAreaElement>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
 
+  // 场景卡片内嵌 SKILL 上传弹窗
+  const [skillDialogTask, setSkillDialogTask] = useState<{
+    taskName: string; sectionName: string; nodeName: string; processName: string; processShortName: string;
+  } | null>(null);
+  const [skillName, setSkillName] = useState("");
+  const [skillVersion, setSkillVersion] = useState("v1.0");
+  const [skillFile, setSkillFile] = useState<UploadedFile | null>(null);
+  const [skillSubmitting, setSkillSubmitting] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/dashboard/admin-check")
@@ -235,8 +246,7 @@ export function NodeMappingGrid({
       if (r2.success) {
         const stepsPerTask: Record<string, Set<number>> = {};
         for (const record of r2.records) {
-          const taskName = (record.fields["所属场景"] ||
-            record.fields["关联任务"]) as string;
+          const taskName = record.fields["所属场景"] as string;
           const step = record.fields["步骤编号"] as number;
           const status = record.fields["步骤状态"] as string;
           if (!taskName) continue;
@@ -815,9 +825,19 @@ export function NodeMappingGrid({
                   });
                   setTimeout(() => batchTextRef.current?.focus(), 50);
                 }}
-                onNavigateToTask={(taskName) =>
-                  router.push(`/section2?task=${encodeURIComponent(taskName)}`)
-                }
+                onNavigateToTask={(taskName) => {
+                  const found = allSavedTasks.find((x) => x.task.taskName === taskName);
+                  setSkillDialogTask({
+                    taskName,
+                    sectionName: found?.sectionName || "",
+                    nodeName: found?.nodeName || "",
+                    processName: process.name,
+                    processShortName: process.shortName,
+                  });
+                  setSkillName(taskName);
+                  setSkillVersion("v1.0");
+                  setSkillFile(null);
+                }}
               />
             );
           })}
@@ -1324,6 +1344,93 @@ export function NodeMappingGrid({
           onCancel={() => setDeleteConfirm(null)}
           onProceed={performDelete}
         />
+      )}
+
+      {/* 场景卡片 SKILL 上传弹窗 */}
+      {skillDialogTask && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="px-5 py-3 border-b flex items-center gap-3">
+              <UploadCloud size={18} className="text-purple-600" />
+              <div className="font-semibold text-gray-900">上传 SKILL ZIP</div>
+              <div className="flex-1" />
+              <button onClick={() => setSkillDialogTask(null)} className="p-1 text-gray-500 hover:text-gray-800"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="rounded-xl border bg-gray-50 p-3 text-sm">
+                <div className="font-semibold text-gray-900">{skillDialogTask.taskName}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {skillDialogTask.processName} / {skillDialogTask.sectionName} / {skillDialogTask.nodeName}
+                </div>
+              </div>
+              <div className="grid md:grid-cols-2 gap-3">
+                <label className="space-y-1">
+                  <span className="text-xs text-gray-600">SKILL 名称</span>
+                  <input value={skillName} onChange={(e) => setSkillName(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs text-gray-600">版本号</span>
+                  <input value={skillVersion} onChange={(e) => setSkillVersion(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" />
+                </label>
+              </div>
+              <FileUploader
+                label="SKILL ZIP 包"
+                hint="只允许上传 1 个 .zip 文件，大小不超过 200MB"
+                accept=".zip,application/zip"
+                purpose="skill"
+                maxSizeMB={200}
+                uploaded={skillFile}
+                onUpload={setSkillFile}
+                required
+              />
+            </div>
+            <div className="px-5 py-3 bg-gray-50 border-t flex items-center gap-2">
+              <span className="text-xs text-gray-400">提交人：{userName}</span>
+              <div className="flex-1" />
+              <Button variant="outline" onClick={() => setSkillDialogTask(null)}>取消</Button>
+              <Button
+                onClick={async () => {
+                  if (!skillDialogTask || !skillFile) return;
+                  setSkillSubmitting(true);
+                  try {
+                    const res = await fetch("/api/bitable/records", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        table: "2",
+                        fields: {
+                          团队名称: team,
+                          所属场景: skillDialogTask.taskName,
+                          SKILL名称: skillName || skillDialogTask.taskName,
+                          SKILL文件名: skillFile.file_name,
+                          SKILL文件链接: { link: skillFile.url, text: skillFile.file_name },
+                          SKILL文件Token: skillFile.file_token,
+                          版本号: skillVersion || "v1.0",
+                          端到端流程: skillDialogTask.processShortName,
+                          流程环节: skillDialogTask.sectionName,
+                          流程节点: skillDialogTask.nodeName,
+                          步骤状态: "已完成",
+                        },
+                      }),
+                    });
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.error || "提交失败");
+                    setProgressMap((prev) => ({ ...prev, [skillDialogTask.taskName]: (prev[skillDialogTask.taskName] || 0) + 1 }));
+                    setSkillDialogTask(null);
+                  } catch (err) {
+                    alert(`SKILL 上传失败：${err}`);
+                  } finally {
+                    setSkillSubmitting(false);
+                  }
+                }}
+                disabled={!skillFile || skillSubmitting}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                {skillSubmitting ? "保存中..." : "绑定到场景"}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       <span className="hidden">{userName}</span>
@@ -1900,7 +2007,7 @@ function TaskCard({
         <button
           type="button"
           onClick={onNavigate}
-          title="打开「Skill创建」，继续这个场景"
+          title="为该场景上传 SKILL ZIP 包"
           className={cn(
             "mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg py-2 px-2",
             "text-xs font-semibold text-white shadow-sm border border-orange-700",
@@ -1908,7 +2015,7 @@ function TaskCard({
             "transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-1"
           )}
         >
-          <span>Skill创建</span>
+          <span>上传SKILL</span>
           <ArrowRight size={16} strokeWidth={2.5} className="flex-shrink-0" aria-hidden />
         </button>
       )}

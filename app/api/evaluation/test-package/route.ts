@@ -5,17 +5,23 @@ import { asString, extractUrl, makeBitableFilter } from "@/lib/record-utils";
 
 function requiredEnv() {
   const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
+  const table1 = process.env.FEISHU_TABLE1_ID;
   const table2 = process.env.FEISHU_TABLE2_ID;
   const table7 = process.env.FEISHU_TABLE7_ID;
+  const table8 = process.env.FEISHU_TABLE8_ID;
   const table9 = process.env.FEISHU_TABLE9_ID;
-  if (!appToken || !table2 || !table7 || !table9) {
-    throw new Error("FEISHU_TABLE2_ID / FEISHU_TABLE7_ID / FEISHU_TABLE9_ID 未完整配置");
+  if (!appToken || !table1 || !table2 || !table7 || !table9) {
+    throw new Error("FEISHU_TABLE1_ID / FEISHU_TABLE2_ID / FEISHU_TABLE7_ID / FEISHU_TABLE9_ID 未完整配置");
   }
-  return { appToken, table2, table7, table9 };
+  return { appToken, table1, table2, table7, table8: table8 || "", table9 };
 }
 
 function safeName(name: string) {
   return (name || "未命名").replace(/[\\/:*?"<>|]/g, "_").slice(0, 80);
+}
+
+function normalizeMatchValue(value: unknown) {
+  return asString(value).trim();
 }
 
 async function addDriveFileOrLink(
@@ -25,25 +31,31 @@ async function addDriveFileOrLink(
   fileToken: string,
   fileUrl: string
 ) {
+  const displayName = safeName(fileName || "未命名条目");
   const target = `${folder}/${safeName(fileName || fileToken || "资料")}`;
+  const linkNotePath = `${folder}/${displayName}_请用记事本打开查看文件链接.txt`;
   if (fileToken) {
     try {
       const file = await downloadFileFromDrive(fileToken);
       zip.file(target, file.buffer);
       return;
     } catch (err) {
-      zip.file(`${target}.download-error.txt`, `飞书文件下载失败，请手动打开链接：${fileUrl}\n${String(err)}`);
+      if (fileUrl) {
+        zip.file(linkNotePath, `${fileUrl}\n飞书文件下载失败：${String(err)}`);
+      } else {
+        zip.file(`${target}.download-error.txt`, `飞书文件下载失败：${String(err)}`);
+      }
       return;
     }
   }
   if (fileUrl) {
-    zip.file(`${target}.url.txt`, fileUrl);
+    zip.file(linkNotePath, fileUrl);
   }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const { appToken, table2, table7, table9 } = requiredEnv();
+    const { appToken, table1, table2, table7, table8, table9 } = requiredEnv();
     const sp = req.nextUrl.searchParams;
     const team = sp.get("team") || "";
     const scene = sp.get("scene") || "";
@@ -52,7 +64,55 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "team、scene、datasetId 不能为空" }, { status: 400 });
     }
 
-    const [skills, knowledge, materials] = await Promise.all([
+    // 1. 先拿到 dataset 记录，获取 process/section/node 信息
+    let datasetNode = "";
+    if (table8) {
+      try {
+        const dsRecords = await getAllRecords(appToken, table8);
+        const datasetRecord = dsRecords.find((r) => r.record_id === datasetId);
+        if (datasetRecord) {
+          datasetNode = asString(
+            datasetRecord.fields["流程节点"] ||
+            datasetRecord.fields["节点"] ||
+            ""
+          );
+        }
+      } catch {
+        // table8 可能未配置，忽略
+      }
+    }
+
+    // 2. 再从流程节点映射表按场景获取标准流程节点（双通道查找的节点通道）
+    let mappedNode = "";
+    try {
+      const mappings = await getAllRecords(
+        appToken,
+        table1,
+        makeBitableFilter([
+          `CurrentValue.[团队名称]="${team}"`,
+          `CurrentValue.[场景名称]="${scene}"`,
+        ])
+      );
+      const fallbackMappings =
+        mappings.length > 0
+          ? mappings
+          : await getAllRecords(
+              appToken,
+              table1,
+              makeBitableFilter([
+                `CurrentValue.[团队名称]="${team}"`,
+                `CurrentValue.[任务名称]="${scene}"`,
+              ])
+            );
+      const first = fallbackMappings[0];
+      if (first) {
+        mappedNode = asString(first.fields["流程节点"] || first.fields["节点"] || "");
+      }
+    } catch {
+      // 映射读取失败不阻塞下载
+    }
+
+    const [skills, allKnowledge, materials] = await Promise.all([
       getAllRecords(appToken, table2, makeBitableFilter([
         `CurrentValue.[团队名称]="${team}"`,
         `CurrentValue.[所属场景]="${scene}"`,
@@ -60,13 +120,50 @@ export async function GET(req: NextRequest) {
       getAllRecords(appToken, table7, makeBitableFilter([
         `CurrentValue.[团队名称]="${team}"`,
         `CurrentValue.[状态]="已发布"`,
-        `CurrentValue.[是否当前版本]=true`,
       ])),
       getAllRecords(appToken, table9, `CurrentValue.[评测集ID]="${datasetId}"`),
     ]);
+    const currentKnowledge = allKnowledge.filter((rec) => {
+      const raw = rec.fields["是否当前版本"];
+      return raw === true || String(raw).toLowerCase() === "true";
+    });
+
+    // 3. 双通道命中知识库：场景通道 + 节点通道（并集去重）
+    const normalizedScene = normalizeMatchValue(scene);
+    const targetNode = normalizeMatchValue(mappedNode || datasetNode);
+    const byScene = currentKnowledge.filter(
+      (rec) => normalizeMatchValue(rec.fields["关联场景名"]) === normalizedScene
+    );
+    const byNode = targetNode
+      ? currentKnowledge.filter((rec) => {
+          const recNode = normalizeMatchValue(
+            rec.fields["流程节点"] ||
+              rec.fields["节点"] ||
+              rec.fields["关联节点"] ||
+              ""
+          );
+          return recNode === targetNode;
+        })
+      : [];
+    const knowledgeMap = new Map<string, (typeof allKnowledge)[number]>();
+    for (const rec of byScene) knowledgeMap.set(rec.record_id, rec);
+    for (const rec of byNode) knowledgeMap.set(rec.record_id, rec);
+    const knowledge = Array.from(knowledgeMap.values());
+    console.info("[evaluation/test-package] knowledge-hit", {
+      team,
+      scene,
+      datasetId,
+      targetNode,
+      allKnowledgeCount: allKnowledge.length,
+      currentKnowledgeCount: currentKnowledge.length,
+      sceneMatchCount: byScene.length,
+      nodeMatchCount: byNode.length,
+      unionCount: knowledge.length,
+    });
 
     const zip = new JSZip();
     const root = `${safeName(scene)}_线下测试包`;
+    zip.folder(`${root}/知识库`);
     const latestSkill = skills
       .slice()
       .sort((a, b) => Number(b.fields["提交时间"] || 0) - Number(a.fields["提交时间"] || 0))[0];
@@ -83,7 +180,7 @@ export async function GET(req: NextRequest) {
 
     for (const rec of knowledge) {
       const f = rec.fields;
-      const type = asString(f["资料类型"]) || "规则";
+      const type = asString(f["资料类型"]) || asString(f["素材类型"]) || "规则";
       await addDriveFileOrLink(
         zip,
         `${root}/知识库/${safeName(type)}`,

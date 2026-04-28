@@ -44,6 +44,15 @@ function extractPersonOpenIds(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function extractPersonName(value: unknown): string {
+  if (!Array.isArray(value) || value.length === 0) return "";
+  const first = value[0];
+  if (!first || typeof first !== "object") return "";
+  const obj = first as Record<string, unknown>;
+  const name = obj.name;
+  return typeof name === "string" ? name : "";
+}
+
 function readTextField(fields: Record<string, unknown>, key: string): string {
   const v = fields[key];
   if (!v) return "";
@@ -244,9 +253,11 @@ export async function getAllUserProfiles(): Promise<UserProfile[]> {
   return all.map((record) => {
     const f = record.fields;
     const openId = extractPersonOpenIds(f["人员"])[0] || "";
+    const personName = extractPersonName(f["人员"]);
     const roleRaw = readTextField(f, "角色");
     return {
       openId,
+      name: personName || readTextField(f, "姓名"),
       team: readTextField(f, "归属团队") || readTextField(f, "团队名称"),
       role:
         roleRaw === "管理员"

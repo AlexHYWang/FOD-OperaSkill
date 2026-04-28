@@ -171,9 +171,7 @@ export function SkillStepWizard({ team, userName, readOnly = false }: SkillStepW
       if (r2.success) {
         const stepsPerTask: Record<string, Set<number>> = {};
         for (const rec of r2.records) {
-          const taskName = String(
-            rec.fields["所属场景"] || rec.fields["关联任务"] || ""
-          );
+          const taskName = String(rec.fields["所属场景"] || "");
           const step = Number(rec.fields["步骤编号"]);
           const status = String(rec.fields["步骤状态"] || "");
           if (!taskName || status !== "已完成") continue;
@@ -610,7 +608,6 @@ function StepTabsPanel({
                 fields: {
                   团队名称: team,
                   所属场景: task.taskName,
-                  关联任务: task.taskName,
                   步骤编号: stepNum,
                   内容类型: item.contentType,
                   文件名称: f.file_name,
@@ -632,7 +629,6 @@ function StepTabsPanel({
             fields: {
               团队名称: team,
               所属场景: task.taskName,
-              关联任务: task.taskName,
               步骤编号: stepNum,
               内容类型: item.contentType,
               文件名称: item.file?.file_name || "",

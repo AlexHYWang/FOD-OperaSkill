@@ -34,22 +34,17 @@ const skillTable2Fields: Field[] = [
   { field_name: "SKILL文件链接", type: FIELD_TYPE.URL },
   { field_name: "SKILL文件Token", type: FIELD_TYPE.TEXT },
   { field_name: "版本号", type: FIELD_TYPE.TEXT },
-  {
-    field_name: "上传状态",
-    type: FIELD_TYPE.SINGLE_SELECT,
-    property: { options: [{ name: "已上传" }, { name: "已作废" }] },
-  },
   { field_name: "端到端流程", type: FIELD_TYPE.TEXT },
-  { field_name: "环节", type: FIELD_TYPE.TEXT },
-  { field_name: "节点", type: FIELD_TYPE.TEXT },
+  { field_name: "流程环节", type: FIELD_TYPE.TEXT },
+  { field_name: "流程节点", type: FIELD_TYPE.TEXT },
 ];
 
 const table7Fields: Field[] = [
   { field_name: "条目标题", type: FIELD_TYPE.TEXT },
   { field_name: "团队名称", type: FIELD_TYPE.TEXT },
   { field_name: "端到端流程", type: FIELD_TYPE.TEXT },
-  { field_name: "环节", type: FIELD_TYPE.TEXT },
-  { field_name: "节点", type: FIELD_TYPE.TEXT },
+  { field_name: "流程环节", type: FIELD_TYPE.TEXT },
+  { field_name: "流程节点", type: FIELD_TYPE.TEXT },
   { field_name: "关联场景名", type: FIELD_TYPE.TEXT },
   {
     field_name: "资料类型",
@@ -85,16 +80,23 @@ const table7Fields: Field[] = [
   { field_name: "退回原因", type: FIELD_TYPE.TEXT },
   { field_name: "备注", type: FIELD_TYPE.TEXT },
   { field_name: "提交时间", type: FIELD_TYPE.DATE },
+  // 新增（本次改造 ⑧⑪）
+  {
+    field_name: "绑定范围",
+    type: FIELD_TYPE.SINGLE_SELECT,
+    property: { options: [{ name: "节点" }, { name: "场景" }] },
+  },
+  { field_name: "提交人open_id", type: FIELD_TYPE.TEXT },
 ];
 
 const table8Fields: Field[] = [
   { field_name: "评测集名称", type: FIELD_TYPE.TEXT },
   { field_name: "团队名称", type: FIELD_TYPE.TEXT },
-  { field_name: "所属场景", type: FIELD_TYPE.TEXT },
+  { field_name: "关联场景名", type: FIELD_TYPE.TEXT },
   { field_name: "覆盖范围说明", type: FIELD_TYPE.TEXT },
   { field_name: "端到端流程", type: FIELD_TYPE.TEXT },
-  { field_name: "环节", type: FIELD_TYPE.TEXT },
-  { field_name: "节点", type: FIELD_TYPE.TEXT },
+  { field_name: "流程环节", type: FIELD_TYPE.TEXT },
+  { field_name: "流程节点", type: FIELD_TYPE.TEXT },
   {
     field_name: "状态",
     type: FIELD_TYPE.SINGLE_SELECT,
@@ -110,7 +112,7 @@ const table8Fields: Field[] = [
 const table9Fields: Field[] = [
   { field_name: "评测集ID", type: FIELD_TYPE.TEXT },
   { field_name: "团队名称", type: FIELD_TYPE.TEXT },
-  { field_name: "所属场景", type: FIELD_TYPE.TEXT },
+  { field_name: "关联场景名", type: FIELD_TYPE.TEXT },
   {
     field_name: "资料板块",
     type: FIELD_TYPE.SINGLE_SELECT,
@@ -133,7 +135,7 @@ const table10Fields: Field[] = [
   { field_name: "被催办人", type: FIELD_TYPE.PERSON },
   { field_name: "发起人", type: FIELD_TYPE.PERSON },
   { field_name: "团队名称", type: FIELD_TYPE.TEXT },
-  { field_name: "所属场景", type: FIELD_TYPE.TEXT },
+  { field_name: "关联场景名", type: FIELD_TYPE.TEXT },
   { field_name: "覆盖范围要求", type: FIELD_TYPE.TEXT },
   {
     field_name: "消息状态",
@@ -148,7 +150,7 @@ const table10Fields: Field[] = [
 
 const table11Fields: Field[] = [
   { field_name: "团队名称", type: FIELD_TYPE.TEXT },
-  { field_name: "所属场景", type: FIELD_TYPE.TEXT },
+  { field_name: "关联场景名", type: FIELD_TYPE.TEXT },
   { field_name: "评测集ID", type: FIELD_TYPE.TEXT },
   { field_name: "SKILL记录ID", type: FIELD_TYPE.TEXT },
   { field_name: "知识库版本", type: FIELD_TYPE.TEXT },
@@ -212,7 +214,7 @@ export async function POST() {
       });
     }
 
-    reports.push(await ensureTable(appToken, "FEISHU_TABLE7_ID", "知识库条目", table7Fields));
+    reports.push(await ensureTable(appToken, "FEISHU_TABLE7_ID", "知识库条目（含绑定范围+提交人open_id）", table7Fields));
     reports.push(await ensureTable(appToken, "FEISHU_TABLE8_ID", "评测集组合", table8Fields));
     reports.push(await ensureTable(appToken, "FEISHU_TABLE9_ID", "评测集资料明细", table9Fields));
     reports.push(await ensureTable(appToken, "FEISHU_TABLE10_ID", "评测集催办记录", table10Fields));

@@ -14,6 +14,7 @@ interface TaskItem {
   label: string;
   processId: string;
   processName: string;
+  processShortName: string;
 }
 
 interface Props {
@@ -60,17 +61,19 @@ export function SkillUploadCenter({ team, userName, readOnly = false }: Props) {
           if (!taskName || seen.has(taskName) || !feishuLabelIsPureManual(label)) continue;
           seen.add(taskName);
           const processId = processIdFrom(e2e, sectionName);
-          const processName = E2E_PROCESSES.find((p) => p.id === processId)?.name || e2e || "未分类流程";
-          next.push({ taskName, sectionName, nodeName, label, processId, processName });
+          const processDef = E2E_PROCESSES.find((p) => p.id === processId);
+          const processName = processDef?.name || e2e || "未分类流程";
+          const processShortName = processDef?.shortName || e2e || "";
+          next.push({ taskName, sectionName, nodeName, label, processId, processName, processShortName });
         }
         setTasks(next);
       }
       if (r2.success) {
         const counts: Record<string, number> = {};
         for (const rec of r2.records || []) {
-          const scene = String(rec.fields["所属场景"] || rec.fields["关联任务"] || "");
-          const status = String(rec.fields["上传状态"] || rec.fields["步骤状态"] || "");
-          if (scene && (status === "已上传" || status === "已完成")) {
+          const scene = String(rec.fields["所属场景"] || "");
+          const status = String(rec.fields["步骤状态"] || "");
+          if (scene && status === "已完成") {
             counts[scene] = (counts[scene] || 0) + 1;
           }
         }
@@ -107,18 +110,14 @@ export function SkillUploadCenter({ team, userName, readOnly = false }: Props) {
           fields: {
             团队名称: team,
             所属场景: selectedTask.taskName,
-            关联任务: selectedTask.taskName,
             SKILL名称: skillName || selectedTask.taskName,
             SKILL文件名: file.file_name,
             SKILL文件链接: { link: file.url, text: file.file_name },
             SKILL文件Token: file.file_token,
             版本号: version || "v1.0",
-            上传状态: "已上传",
-            端到端流程: selectedTask.processName,
-            环节: selectedTask.sectionName,
-            节点: selectedTask.nodeName,
-            文件名称: file.file_name,
-            文件链接: { link: file.url, text: file.file_name },
+            端到端流程: selectedTask.processShortName,
+            流程环节: selectedTask.sectionName,
+            流程节点: selectedTask.nodeName,
             步骤状态: "已完成",
           },
         }),

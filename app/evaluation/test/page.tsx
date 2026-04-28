@@ -111,13 +111,56 @@ export default function EvaluationTestPage() {
   );
 }
 
-function RunUploadModal({ dataset, team, scene, onClose }: { dataset: Dataset; team: string; scene: string; onClose: () => void }) {
+function RunUploadModal({
+  dataset,
+  team,
+  scene,
+  onClose,
+}: {
+  dataset: Dataset;
+  team: string;
+  scene: string;
+  onClose: () => void;
+}) {
   const [outputFile, setOutputFile] = useState<UploadedFile | null>(null);
   const [reportFile, setReportFile] = useState<UploadedFile | null>(null);
   const [accuracy, setAccuracy] = useState("");
-  const [skillVersion, setSkillVersion] = useState("");
-  const [knowledgeVersion, setKnowledgeVersion] = useState("");
   const [remark, setRemark] = useState("");
+
+  // 版本自动带出（只读）
+  const [skillVersion, setSkillVersion] = useState<string | null>(null);
+  const [knowledgeVersion, setKnowledgeVersion] = useState<string | null>(null);
+  const [loadingVersions, setLoadingVersions] = useState(true);
+
+  useEffect(() => {
+    if (!team || !scene) { setLoadingVersions(false); return; }
+    setLoadingVersions(true);
+    Promise.all([
+      fetch(`/api/bitable/records?table=2&team=${encodeURIComponent(team)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ records: [] })),
+      fetch(`/api/bitable/records?table=7&team=${encodeURIComponent(team)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ records: [] })),
+    ]).then(([skillData, knData]) => {
+      // 最新 SKILL 版本
+      let latestSkill: { version: string; ts: number } | null = null;
+      for (const rec of skillData.records || []) {
+        const s = String(rec.fields["关联场景名"] || rec.fields["所属场景"] || rec.fields["关联任务"] || "");
+        if (s !== scene) continue;
+        const v = String(rec.fields["版本号"] || "");
+        const ts = Number(rec.fields["提交时间"] || 0);
+        if (!latestSkill || ts > latestSkill.ts) latestSkill = { version: v, ts };
+      }
+      setSkillVersion(latestSkill?.version || null);
+
+      // 已发布知识库版本
+      let latestKn: string | null = null;
+      for (const rec of knData.records || []) {
+        const s = String(rec.fields["关联场景名"] || "");
+        const isCurrent = rec.fields["是否当前版本"] === true;
+        if (isCurrent && s === scene) { latestKn = String(rec.fields["版本号"] || "v1"); break; }
+      }
+      setKnowledgeVersion(latestKn);
+    }).finally(() => setLoadingVersions(false));
+  }, [team, scene]);
+
   const submit = async () => {
     const res = await fetch("/api/evaluation/runs", {
       method: "POST",
@@ -131,8 +174,8 @@ function RunUploadModal({ dataset, team, scene, onClose }: { dataset: Dataset; t
         reportFileName: reportFile?.file_name,
         reportFileUrl: reportFile?.url,
         accuracy: Number(accuracy),
-        skillVersion,
-        knowledgeVersion,
+        skillVersion: skillVersion || "",
+        knowledgeVersion: knowledgeVersion || "",
         tool: "财多多",
         remark,
       }),
@@ -141,24 +184,67 @@ function RunUploadModal({ dataset, team, scene, onClose }: { dataset: Dataset; t
     if (!data.success) alert(data.error || "保存失败");
     else onClose();
   };
+
   return (
     <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
-        <div className="px-5 py-3 border-b flex items-center"><div className="font-semibold">上传测评结果</div><div className="flex-1" /><button onClick={onClose}><X size={16} /></button></div>
+        <div className="px-5 py-3 border-b flex items-center">
+          <div className="font-semibold">上传测评结果</div>
+          <div className="flex-1" />
+          <button onClick={onClose}><X size={16} /></button>
+        </div>
         <div className="p-5 space-y-4">
           <div className="rounded-xl border bg-gray-50 p-3 text-sm">{dataset.name} / {scene}</div>
-          <FileUploader label="机器输出C结果" uploaded={outputFile} onUpload={setOutputFile} required />
-          <FileUploader label="对比分析报告" uploaded={reportFile} onUpload={setReportFile} required />
-          <div className="grid md:grid-cols-3 gap-2">
-            <input value={accuracy} onChange={(e) => setAccuracy(e.target.value)} placeholder="准确率(%) *" className="rounded border px-3 py-2 text-sm" />
-            <input value={skillVersion} onChange={(e) => setSkillVersion(e.target.value)} placeholder="SKILL版本" className="rounded border px-3 py-2 text-sm" />
-            <input value={knowledgeVersion} onChange={(e) => setKnowledgeVersion(e.target.value)} placeholder="知识库版本" className="rounded border px-3 py-2 text-sm" />
+
+          {/* 版本自动带出（只读） */}
+          <div className="grid md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <div className="text-xs text-gray-500">SKILL 版本（自动带出）</div>
+              {loadingVersions ? (
+                <div className="rounded border px-3 py-2 text-sm bg-gray-50 text-gray-400">查询中…</div>
+              ) : skillVersion ? (
+                <div className="rounded border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-medium text-purple-700">{skillVersion}</div>
+              ) : (
+                <div className="rounded border px-3 py-2 text-sm bg-gray-50 text-gray-400">暂无（请先上传SKILL）</div>
+              )}
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs text-gray-500">知识库版本（自动带出）</div>
+              {loadingVersions ? (
+                <div className="rounded border px-3 py-2 text-sm bg-gray-50 text-gray-400">查询中…</div>
+              ) : knowledgeVersion ? (
+                <div className="rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700">{knowledgeVersion}</div>
+              ) : (
+                <div className="rounded border px-3 py-2 text-sm bg-gray-50 text-gray-400">暂无（请先发布知识库）</div>
+              )}
+            </div>
           </div>
-          <textarea value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="测试备注" rows={3} className="w-full rounded border px-3 py-2 text-sm" />
+
+          <FileUploader label="财多多机器输出C结果 *" uploaded={outputFile} onUpload={setOutputFile} required />
+          <FileUploader label="对比分析报告 *" uploaded={reportFile} onUpload={setReportFile} required />
+          <input
+            value={accuracy}
+            onChange={(e) => setAccuracy(e.target.value)}
+            placeholder="准确率(%) *，例如：85.3"
+            className="w-full rounded border px-3 py-2 text-sm"
+            type="number"
+            min={0}
+            max={100}
+            step={0.1}
+          />
+          <textarea
+            value={remark}
+            onChange={(e) => setRemark(e.target.value)}
+            placeholder="测试备注（可选）"
+            rows={3}
+            className="w-full rounded border px-3 py-2 text-sm"
+          />
         </div>
         <div className="px-5 py-3 border-t bg-gray-50 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>取消</Button>
-          <Button onClick={submit} disabled={!outputFile || !reportFile || !accuracy}>提交测评结果</Button>
+          <Button onClick={submit} disabled={!outputFile || !reportFile || !accuracy} className="bg-amber-600 hover:bg-amber-700">
+            提交测评结果
+          </Button>
         </div>
       </div>
     </div>

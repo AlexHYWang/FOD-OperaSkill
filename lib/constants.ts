@@ -359,6 +359,19 @@ export const E2E_PROCESSES: E2EProcess[] = [
   },
 ];
 
+export function findE2EProcess(raw: string): E2EProcess | undefined {
+  const value = (raw || "").trim();
+  if (!value) return undefined;
+  return E2E_PROCESSES.find(
+    (p) => p.id === value || p.shortName === value || p.name === value
+  );
+}
+
+export function normalizeE2EProcessShortName(raw: string): string {
+  const proc = findE2EProcess(raw);
+  return proc?.shortName || (raw || "").trim();
+}
+
 // 兼容旧代码（保留 PTP_SECTIONS 导出）
 export { PTP_SECTIONS };
 

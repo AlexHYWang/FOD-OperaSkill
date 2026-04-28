@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addRecord, getAllRecords } from "@/lib/feishu";
+import { addRecord, getAllRecords, getTenantAccessToken } from "@/lib/feishu";
 import { getSession } from "@/lib/session";
 import { asString, extractUrl, makeBitableFilter } from "@/lib/record-utils";
 
@@ -16,7 +16,7 @@ function mapRecord(record: { record_id: string; fields: Record<string, unknown> 
     id: record.record_id,
     datasetId: asString(f["评测集ID"]),
     team: asString(f["团队名称"]),
-    scene: asString(f["所属场景"]),
+    scene: asString(f["关联场景名"] || f["所属场景"]),
     panel: asString(f["资料板块"]),
     source: asString(f["资料来源"]),
     fileName: asString(f["文件名称"]),
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     const filter = makeBitableFilter([
       datasetId ? `CurrentValue.[评测集ID]="${datasetId}"` : undefined,
       team ? `CurrentValue.[团队名称]="${team}"` : undefined,
-      scene ? `CurrentValue.[所属场景]="${scene}"` : undefined,
+      scene ? `(CurrentValue.[关联场景名]="${scene}" OR CurrentValue.[所属场景]="${scene}")` : undefined,
     ]);
     const records = await getAllRecords(appToken, tableId, filter);
     return NextResponse.json({ success: true, items: records.map(mapRecord) });
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       const rec = await addRecord(appToken, tableId, {
         评测集ID: datasetId,
         团队名称: asString(body.team),
-        所属场景: asString(body.scene),
+        关联场景名: asString(body.scene),
         资料板块: panel,
         资料来源: asString(file.source || body.source) || (fileUrl ? "飞书云文档" : "本地文件"),
         文件名称: fileName,
@@ -83,6 +83,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, ids });
   } catch (err) {
     console.error("[evaluation/materials] POST 失败:", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSession();
+  if (!session.isLoggedIn) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  try {
+    const { appToken, tableId } = config();
+    const recordId = req.nextUrl.searchParams.get("recordId") || "";
+    if (!recordId) return NextResponse.json({ error: "recordId 不能为空" }, { status: 400 });
+    const token = await getTenantAccessToken();
+    const res = await fetch(
+      `https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`,
+      { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+    );
+    const data = await res.json();
+    if (data.code !== 0) return NextResponse.json({ error: data.msg }, { status: 400 });
+    return NextResponse.json({ success: true });
+  } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

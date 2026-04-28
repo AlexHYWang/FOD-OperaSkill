@@ -15,7 +15,7 @@ function mapRecord(record: { record_id: string; fields: Record<string, unknown> 
   return {
     id: record.record_id,
     team: asString(f["团队名称"]),
-    scene: asString(f["所属场景"]),
+    scene: asString(f["关联场景名"] || f["所属场景"]),
     datasetId: asString(f["评测集ID"]),
     skillRecordId: asString(f["SKILL记录ID"]),
     knowledgeVersion: asString(f["知识库版本"]),
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const datasetId = sp.get("datasetId") || "";
     const filter = makeBitableFilter([
       team ? `CurrentValue.[团队名称]="${team}"` : undefined,
-      scene ? `CurrentValue.[所属场景]="${scene}"` : undefined,
+      scene ? `(CurrentValue.[关联场景名]="${scene}" OR CurrentValue.[所属场景]="${scene}")` : undefined,
       datasetId ? `CurrentValue.[评测集ID]="${datasetId}"` : undefined,
     ]);
     const records = await getAllRecords(appToken, tableId, filter);
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     const reportName = asString(body.reportFileName) || reportUrl;
     const record = await addRecord(appToken, tableId, {
       团队名称: asString(body.team),
-      所属场景: scene,
+      关联场景名: scene,
       评测集ID: datasetId,
       SKILL记录ID: asString(body.skillRecordId),
       知识库版本: asString(body.knowledgeVersion),

@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       被催办人: [{ id: targetOpenId }],
       发起人: [{ id: session.user.open_id }],
       团队名称: team,
-      所属场景: scene,
+      关联场景名: scene,
       覆盖范围要求: coverage,
       消息状态: messageStatus,
       发起时间: now,

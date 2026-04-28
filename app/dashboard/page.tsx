@@ -14,7 +14,7 @@ type TabId = "overview" | "outputs" | "blockers" | "goals";
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
   { id: "overview", label: "整体数据概览", icon: <BarChart3 size={15} /> },
-  { id: "outputs", label: "产出物 & 准确率", icon: <FileText size={15} /> },
+  { id: "outputs", label: "场景资产", icon: <FileText size={15} /> },
   { id: "blockers", label: "主要卡点", icon: <AlertTriangle size={15} /> },
   { id: "goals", label: "明日关键目标", icon: <Target size={15} /> },
 ];

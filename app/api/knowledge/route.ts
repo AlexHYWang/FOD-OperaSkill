@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addRecord, getAllRecords, updateRecord } from "@/lib/feishu";
+import { addRecord, getAllRecords, sendFeishuTextMessage, updateRecord } from "@/lib/feishu";
 import { getSession } from "@/lib/session";
 import { asBoolean, asString, extractPersonNames, extractUrl, makeBitableFilter } from "@/lib/record-utils";
 import { canReviewTeam } from "@/lib/user-profile";
+import { normalizeE2EProcessShortName } from "@/lib/constants";
 
 function getConfig() {
   const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
@@ -17,9 +18,9 @@ function mapRecord(record: { record_id: string; fields: Record<string, unknown> 
     id: record.record_id,
     title: asString(f["条目标题"]),
     team: asString(f["团队名称"]),
-    process: asString(f["端到端流程"]),
-    section: asString(f["环节"]),
-    node: asString(f["节点"]),
+    process: normalizeE2EProcessShortName(asString(f["端到端流程"])),
+    section: asString(f["流程环节"] || f["环节"]),
+    node: asString(f["流程节点"] || f["节点"]),
     scene: asString(f["关联场景名"]),
     materialType: asString(f["资料类型"]),
     source: asString(f["资料来源"]),
@@ -35,6 +36,7 @@ function mapRecord(record: { record_id: string; fields: Record<string, unknown> 
     reviewedAt: Number(f["审核时间"] || 0),
     publishedAt: Number(f["发布时间"] || 0),
     rejectReason: asString(f["退回原因"]),
+    bindScope: asString(f["绑定范围"]),
     remark: asString(f["备注"]),
   };
 }
@@ -46,7 +48,7 @@ export async function GET(req: NextRequest) {
     const team = sp.get("team") || "";
     const status = sp.get("status") || "";
     const scene = sp.get("scene") || "";
-    const process = sp.get("process") || "";
+    const process = normalizeE2EProcessShortName(sp.get("process") || "");
     const filter = makeBitableFilter([
       team ? `CurrentValue.[团队名称]="${team}"` : undefined,
       status ? `CurrentValue.[状态]="${status}"` : undefined,
@@ -73,9 +75,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const title = asString(body.title);
     const team = asString(body.team);
-    const process = asString(body.process);
+    const process = normalizeE2EProcessShortName(asString(body.process));
+    const bindScope = asString(body.bindScope) || "节点";
+    const scene = asString(body.scene);
     if (!title || !team || !process) {
       return NextResponse.json({ error: "条目标题、团队、E2E 流程均不能为空" }, { status: 400 });
+    }
+    if (!["节点", "场景"].includes(bindScope)) {
+      return NextResponse.json({ error: "绑定范围仅支持“节点”或“场景”" }, { status: 400 });
+    }
+    if (bindScope === "场景" && !scene) {
+      return NextResponse.json({ error: "绑定范围为场景时，关联场景名不能为空" }, { status: 400 });
     }
     const now = Date.now();
     const fileUrl = asString(body.fileUrl);
@@ -84,9 +94,10 @@ export async function POST(req: NextRequest) {
       条目标题: title,
       团队名称: team,
       端到端流程: process,
-      环节: asString(body.section),
-      节点: asString(body.node),
-      关联场景名: asString(body.scene),
+      流程环节: asString(body.section),
+      流程节点: asString(body.node),
+      关联场景名: bindScope === "场景" ? scene : "",
+      绑定范围: bindScope,
       资料类型: asString(body.materialType) || "规则",
       资料来源: asString(body.source) || "飞书云文档",
       文件名称: fileName,
@@ -95,6 +106,7 @@ export async function POST(req: NextRequest) {
       状态: "待审核",
       是否当前版本: false,
       提交者: [{ id: session.user.open_id }],
+      提交人open_id: asString(body.submitterOpenId) || session.user.open_id,
       提交时间: now,
       备注: asString(body.remark),
     };
@@ -137,13 +149,22 @@ export async function PATCH(req: NextRequest) {
       fields["发布时间"] = now;
       const scene = asString(current.fields["关联场景名"]);
       const process = asString(current.fields["端到端流程"]);
+      const normalizedProcess = normalizeE2EProcessShortName(process);
       const peers = await getAllRecords(
         appToken,
         tableId,
         makeBitableFilter([
           `CurrentValue.[团队名称]="${team}"`,
           scene && `CurrentValue.[关联场景名]="${scene}"`,
-          !scene && process && `CurrentValue.[端到端流程]="${process}"`,
+          !scene &&
+            process &&
+            normalizedProcess &&
+            normalizedProcess !== process &&
+            `(CurrentValue.[端到端流程]="${process}" OR CurrentValue.[端到端流程]="${normalizedProcess}")`,
+          !scene &&
+            process &&
+            (!normalizedProcess || normalizedProcess === process) &&
+            `CurrentValue.[端到端流程]="${process}"`,
         ])
       );
       await Promise.all(
@@ -161,6 +182,32 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: `未知操作: ${action}` }, { status: 400 });
     }
     await updateRecord(appToken, tableId, recordId, fields);
+
+    // ⑪ 审核后通知提交人（发布 / 退回）
+    if (action === "publish" || action === "reject") {
+      try {
+        const title = asString(current.fields["条目标题"]);
+        const version = asString(current.fields["版本号"]) || "v1.0";
+        const submitterOpenId = asString(current.fields["提交人open_id"] || current.fields["提交者open_id"] || "");
+        // 若有 person 类型的提交者字段，尝试提取第一个 open_id
+        const submitterPersonField = current.fields["提交者"];
+        let finalOpenId = submitterOpenId;
+        if (!finalOpenId && Array.isArray(submitterPersonField) && submitterPersonField.length > 0) {
+          const first = submitterPersonField[0] as { id?: string; open_id?: string };
+          finalOpenId = first?.id || first?.open_id || "";
+        }
+        if (finalOpenId) {
+          const msg =
+            action === "publish"
+              ? `您提交的知识库《${title}》已通过审核并发布（${version}），现已生效。`
+              : `您提交的知识库《${title}》审核未通过，退回原因：${asString(body.rejectReason || "未说明")}，请修改后重新提交。`;
+          await sendFeishuTextMessage(finalOpenId, msg);
+        }
+      } catch (notifyErr) {
+        console.warn("[knowledge] 飞书消息通知失败（不影响主流程）:", notifyErr);
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[knowledge] PATCH 失败:", err);
