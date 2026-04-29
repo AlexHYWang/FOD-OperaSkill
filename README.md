@@ -120,6 +120,8 @@ npm run dev
 
 说明：Vercel 对经 Serverless 转发的**大请求体**仍可能有限制；网关体积类说明请见本文档，**勿**在上传组件内展示换色警示文案以免影响界面。
 
+**发版后出现 `ChunkLoadError: Loading chunk xxx failed`：** 多为浏览器仍持有旧版页面、却去拉已不存在的 `_next/static/chunks/...`。请**关闭该标签页后从首页重新进入**，或 **Ctrl+Shift+R 强制刷新**；上传区在检测到此类错误时会尝试**自动刷新一次**。
+
 ## 内置资源
 
 | 文件 | 说明 |

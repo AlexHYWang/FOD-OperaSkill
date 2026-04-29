@@ -1,8 +1,25 @@
 "use client";
 
+import { upload as vercelBlobUpload } from "@vercel/blob/client";
 import { useState, useRef } from "react";
 import { Upload, CheckCircle2, XCircle, Loader2, File, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const CHUNK_RELOAD_KEY = "fod_chunk_reload_once";
+
+function reloadOnceOnStaleChunk(err: unknown): boolean {
+  const msg = String(err);
+  if (!/ChunkLoadError|Loading chunk \d+ failed/i.test(msg)) return false;
+  if (typeof window === "undefined") return false;
+  try {
+    if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) return false;
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+    window.location.reload();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface UploadedFile {
   file_token: string;
@@ -59,10 +76,9 @@ async function uploadFile(
 
   const storage = options.storage ?? "feishu-api";
   if (storage === "vercel-blob") {
-    const { upload } = await import("@vercel/blob/client");
     const handleUrl = options.handleBlobUploadUrl ?? "/api/upload/blob";
     try {
-      const result = await upload(blobPathname(file), file, {
+      const result = await vercelBlobUpload(blobPathname(file), file, {
         access: "public",
         handleUploadUrl: handleUrl,
         multipart: file.size >= 8 * 1024 * 1024,
@@ -74,7 +90,15 @@ async function uploadFile(
         file_size: file.size,
       };
     } catch (err) {
+      if (reloadOnceOnStaleChunk(err)) {
+        return new Promise<UploadedFile>(() => {});
+      }
       const msg = String(err);
+      if (/ChunkLoadError|Loading chunk \d+ failed/i.test(msg)) {
+        throw new Error(
+          "页面脚本与当前部署不一致（常见于刚发版后）：请关闭本标签页后重新从首页进入，或强制刷新（Ctrl+Shift+R）。"
+        );
+      }
       if (/请先登录|401/.test(msg)) throw new Error("请先登录后再上传");
       if (/503|BLOB_READ_WRITE_TOKEN|未配置/.test(msg)) {
         throw new Error("Blob 未配置：请在环境变量中设置 BLOB_READ_WRITE_TOKEN，或暂时关闭 NEXT_PUBLIC_BLOB_UPLOAD_ENABLED");
