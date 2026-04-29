@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -9,6 +10,7 @@ import {
   ChevronDown,
   Download,
   FilePlus2,
+  Filter,
   FlaskConical,
   Loader2,
   Plus,
@@ -19,11 +21,18 @@ import {
   Zap,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
-import { MultiFileUploader, type UploadedFile } from "@/components/FileUploader";
+import {
+  MultiFileUploader,
+  type UploadedFile,
+  type UploadStorage,
+} from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
-import { E2E_PROCESSES } from "@/lib/constants";
+import { E2E_PROCESSES, normalizeE2EProcessShortName } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+
+const EVALUATION_UPLOAD_STORAGE: UploadStorage =
+  process.env.NEXT_PUBLIC_BLOB_UPLOAD_ENABLED === "1" ? "vercel-blob" : "feishu-api";
 
 interface Dataset {
   id: string;
@@ -72,6 +81,21 @@ interface SceneOption {
   node: string;
 }
 
+interface MappingRow {
+  process: string;
+  section: string;
+  node: string;
+}
+
+function dedupeMappingRows(rows: MappingRow[]): MappingRow[] {
+  const map = new Map<string, MappingRow>();
+  for (const r of rows) {
+    const k = `${r.process}\t${r.section}\t${r.node}`;
+    if (!map.has(k)) map.set(k, r);
+  }
+  return Array.from(map.values());
+}
+
 export default function EvaluationPage() {
   const router = useRouter();
   const { user, isLoggedIn, loading, team, setTeam, profile } = useAuth();
@@ -83,6 +107,18 @@ export default function EvaluationPage() {
   const [showDatasetForm, setShowDatasetForm] = useState(false);
   const [showMaterialForm, setShowMaterialForm] = useState<Dataset | null>(null);
   const [showReminder, setShowReminder] = useState(false);
+  const [filterProcess, setFilterProcess] = useState("");
+  const [filterSection, setFilterSection] = useState("");
+  const [filterNode, setFilterNode] = useState("");
+
+  useEffect(() => {
+    setFilterSection("");
+    setFilterNode("");
+  }, [filterProcess]);
+
+  useEffect(() => {
+    setFilterNode("");
+  }, [filterSection]);
 
   useEffect(() => {
     if (!loading && !isLoggedIn) router.push("/");
@@ -182,85 +218,188 @@ export default function EvaluationPage() {
     return warnings;
   };
 
+  const filteredDatasets = useMemo(() => {
+    return datasets.filter((d) => {
+      if (filterProcess && d.process !== filterProcess) return false;
+      if (filterSection && d.section !== filterSection) return false;
+      if (filterNode && d.node !== filterNode) return false;
+      return true;
+    });
+  }, [datasets, filterProcess, filterSection, filterNode]);
+
+  const processFilterOptions = useMemo(() => {
+    return Array.from(new Set(datasets.map((d) => d.process).filter(Boolean))).sort();
+  }, [datasets]);
+
+  const sectionFilterOptions = useMemo(() => {
+    const pool = filterProcess ? datasets.filter((d) => d.process === filterProcess) : datasets;
+    return Array.from(new Set(pool.map((d) => d.section).filter(Boolean))).sort();
+  }, [datasets, filterProcess]);
+
+  const nodeFilterOptions = useMemo(() => {
+    let pool = datasets;
+    if (filterProcess) pool = pool.filter((d) => d.process === filterProcess);
+    if (filterSection) pool = pool.filter((d) => d.section === filterSection);
+    return Array.from(new Set(pool.map((d) => d.node).filter(Boolean))).sort();
+  }, [datasets, filterProcess, filterSection]);
+
   return (
     <AppLayout team={team} onTeamChange={setTeam} user={user}>
-      <div className="p-6 max-w-6xl mx-auto space-y-4">
-        <header className="flex items-start justify-between gap-3">
-          <div>
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 rounded-2xl border border-gray-200/80 bg-gradient-to-br from-white to-teal-50/40 px-5 py-4 shadow-sm">
+          <div className="min-w-0">
             <div className="flex items-center gap-2 text-teal-600 text-sm font-medium">
               <FlaskConical size={18} /> 评测集管理中心
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mt-1">评测集上传与 A/C 资料管理</h1>
-            <p className="text-sm text-gray-500 mt-1">每条评测集组合包含输入A样本和人工输出C结果两个资料板块。</p>
+            <h1 className="text-2xl font-bold text-gray-900 mt-1 tracking-tight">评测集上传与 A/C 资料管理</h1>
+            <p className="text-sm text-gray-500 mt-1 max-w-2xl">每条评测集组合包含输入 A 样本与人工输出 C 结果；卡片标题优先展示<strong className="text-gray-700">覆盖范围</strong>便于识别。</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap shrink-0">
             <Button variant="outline" onClick={load}><RefreshCw size={14} className="mr-1" /> 刷新</Button>
             <Button variant="outline" onClick={() => setShowReminder(true)}><Bell size={14} className="mr-1" /> 评测集催办</Button>
             <Button onClick={() => setShowDatasetForm(true)} className="bg-teal-600 hover:bg-teal-700"><Plus size={14} className="mr-1" /> 新增评测集</Button>
           </div>
         </header>
 
-        <section className="rounded-2xl bg-white border overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b text-sm font-semibold">评测集组合</div>
+        <section className="rounded-2xl bg-white border border-gray-200/80 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/80 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm font-semibold text-gray-800">评测集组合</div>
+            {datasets.length > 0 && (
+              <div className="flex flex-wrap items-end gap-2 text-xs">
+                <div className="flex items-center gap-1 text-gray-500 shrink-0">
+                  <Filter size={12} /> 筛选
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 min-w-0 sm:max-w-xl">
+                  <SelectWithChevron
+                    value={filterProcess}
+                    onChange={setFilterProcess}
+                    placeholder="端到端流程"
+                  >
+                    {processFilterOptions.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </SelectWithChevron>
+                  <SelectWithChevron
+                    value={filterSection}
+                    onChange={setFilterSection}
+                    placeholder="流程环节"
+                  >
+                    {sectionFilterOptions.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </SelectWithChevron>
+                  <SelectWithChevron
+                    value={filterNode}
+                    onChange={setFilterNode}
+                    placeholder="流程节点"
+                  >
+                    {nodeFilterOptions.map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </SelectWithChevron>
+                </div>
+                {(filterProcess || filterSection || filterNode) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs text-gray-600"
+                    onClick={() => { setFilterProcess(""); setFilterSection(""); setFilterNode(""); }}
+                  >
+                    清空
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
           <div className="p-4 space-y-3">
             {datasets.length === 0 ? (
-              <div className="py-10 text-center text-sm text-gray-400">暂无评测集</div>
+              <div className="py-12 text-center text-sm text-gray-400">暂无评测集</div>
+            ) : filteredDatasets.length === 0 ? (
+              <div className="py-10 text-center text-sm text-gray-500">当前筛选下无匹配评测集，请调整或清空筛选条件。</div>
             ) : (
-              datasets.map((d) => {
+              filteredDatasets.map((d) => {
                 const { skillVersion, knowledgeVersion } = getVersionInfo(d);
                 const warnings = getUsabilityWarnings(d);
                 const mats = materials[d.id] || [];
                 const aCount = mats.filter((m) => m.panel === "输入A样本").length;
                 const cCount = mats.filter((m) => m.panel === "人工输出C结果").length;
+                const titlePrimary = (d.coverage || "").trim() || d.name;
+                const titleSecondary = (d.coverage || "").trim() ? d.name : "";
                 return (
-                  <div key={d.id} className="rounded-xl border p-3">
-                    <div className="flex items-start gap-2 flex-wrap">
-                      {/* 可用性警告徽标 ⑫ */}
-                      {warnings.map((w) => (
-                        <button
-                          key={w}
-                          onClick={() => setShowMaterialForm(d)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-medium hover:bg-orange-100"
+                  <div
+                    key={d.id}
+                    className="rounded-2xl border border-gray-200/90 bg-white p-4 shadow-sm hover:shadow-md hover:border-teal-200/60 transition-all"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1 space-y-2 border-l-4 border-teal-500 pl-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {warnings.map((w) => (
+                            <button
+                              key={w}
+                              type="button"
+                              onClick={() => setShowMaterialForm(d)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-medium hover:bg-orange-100"
+                            >
+                              <AlertTriangle size={11} /> {w}
+                            </button>
+                          ))}
+                          <span className={cn("px-1.5 py-0.5 rounded text-[11px]", d.status === "可用" ? "bg-teal-50 text-teal-700" : "bg-gray-100 text-gray-600")}>{d.status || "可用"}</span>
+                        </div>
+                        <div
+                          className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2"
+                          title={titlePrimary}
                         >
-                          <AlertTriangle size={11} /> {w}
-                        </button>
-                      ))}
-                      <span className={cn("px-1.5 py-0.5 rounded text-[11px]", d.status === "可用" ? "bg-teal-50 text-teal-700" : "bg-gray-100 text-gray-600")}>{d.status || "可用"}</span>
-                      <div className="font-semibold text-sm flex-1">{d.name}</div>
-
-                      {/* 版本徽章 ⑩ */}
-                      {skillVersion ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[11px]">
-                          <Zap size={10} /> SKILL {skillVersion}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-gray-400">SKILL 未上传</span>
-                      )}
-                      {knowledgeVersion ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px]">
-                          <BookOpen size={10} /> 知识库 {knowledgeVersion}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-gray-400">知识库未发布</span>
-                      )}
-                    </div>
-                    <div className="mt-2 text-xs text-gray-500 flex flex-wrap gap-2">
-                      <span>{d.team}</span>
-                      <span>场景：{d.scene}</span>
-                      {d.process && <span>{d.process}</span>}
-                      {d.coverage && <span className="text-gray-700">覆盖范围：{d.coverage}</span>}
-                      <span className="text-gray-400">A样本: {aCount} | C结果: {cCount}</span>
-                    </div>
-                    <div className="mt-3 flex justify-end gap-2 flex-wrap">
-                      <Button size="sm" variant="outline" onClick={() => setShowMaterialForm(d)}>
-                        <FilePlus2 size={13} className="mr-1" /> 追加/查看 A/C 资料
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => router.push(`/evaluation/test?datasetId=${encodeURIComponent(d.id)}&scene=${encodeURIComponent(d.scene)}`)}
-                      >
-                        去线下测试
-                      </Button>
+                          {titlePrimary}
+                        </div>
+                        {titleSecondary ? (
+                          <div className="text-xs text-gray-500 line-clamp-1" title={titleSecondary}>
+                            {titleSecondary}
+                          </div>
+                        ) : null}
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                            <span className="text-gray-600">{d.team}</span>
+                            <span>场景：{d.scene}</span>
+                          </div>
+                          {(d.process || d.section || d.node) && (
+                            <div className="text-gray-500">
+                              {[d.process, d.section, d.node].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                          <div className="text-gray-400 pt-0.5">A 样本 {aCount} · C 结果 {cCount}</div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          {skillVersion ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[11px]">
+                              <Zap size={10} /> SKILL {skillVersion}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-gray-400 px-1">SKILL 未上传</span>
+                          )}
+                          {knowledgeVersion ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px]">
+                              <BookOpen size={10} /> 知识库 {knowledgeVersion}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-gray-400 px-1">知识库未发布</span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setShowMaterialForm(d)}>
+                            <FilePlus2 size={13} className="mr-1" /> 追加/查看 A/C 资料
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            onClick={() => router.push(`/evaluation/test?datasetId=${encodeURIComponent(d.id)}&scene=${encodeURIComponent(d.scene)}`)}
+                          >
+                            去线下测试
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
@@ -282,6 +421,7 @@ export default function EvaluationPage() {
           <MaterialForm
             dataset={showMaterialForm}
             existingMaterials={materials[showMaterialForm.id] || []}
+            uploadStorage={EVALUATION_UPLOAD_STORAGE}
             onClose={() => setShowMaterialForm(null)}
             onDone={() => { setShowMaterialForm(null); load(); }}
           />
@@ -319,24 +459,115 @@ function DatasetForm({
   const [scene, setScene] = useState("");
   const [coverage, setCoverage] = useState("");
   const [remark, setRemark] = useState("");
+  const [mappingRows, setMappingRows] = useState<MappingRow[]>([]);
+  const [mappingLoading, setMappingLoading] = useState(false);
 
-  const proc = E2E_PROCESSES.find((p) => p.name === process);
-  const sec = proc?.sections.find((s) => s.name === section);
+  const procStatic = E2E_PROCESSES.find((p) => p.name === process);
+  const secStatic = procStatic?.sections.find((s) => s.name === section);
+  const useTable1Options = mappingRows.length > 0;
 
-  // 根据节点过滤可选场景
-  const filteredScenes = useMemo(
-    () => node ? teamScenes.filter((s) => s.node === node) : scene ? teamScenes : [],
-    [teamScenes, node, scene]
-  );
+  const processOptionsTable = useMemo(() => {
+    const set = new Set(mappingRows.map((r) => r.process).filter(Boolean));
+    return Array.from(set).sort();
+  }, [mappingRows]);
 
-  // 当选择场景时自动填充流程/环节/节点
+  const sectionOptionsTable = useMemo(() => {
+    if (!process) return Array.from(new Set(mappingRows.map((r) => r.section).filter(Boolean))).sort();
+    return Array.from(
+      new Set(mappingRows.filter((r) => r.process === process).map((r) => r.section).filter(Boolean))
+    ).sort();
+  }, [mappingRows, process]);
+
+  const nodeOptionsTable = useMemo(() => {
+    let pool = mappingRows;
+    if (process) pool = pool.filter((r) => r.process === process);
+    if (section) pool = pool.filter((r) => r.section === section);
+    return Array.from(new Set(pool.map((r) => r.node).filter(Boolean))).sort();
+  }, [mappingRows, process, section]);
+
+  const loadMappingForScene = async (sceneName: string) => {
+    if (!team || !sceneName) {
+      setMappingRows([]);
+      return;
+    }
+    setMappingLoading(true);
+    try {
+      const d = await fetch(
+        `/api/bitable/records?table=1&team=${encodeURIComponent(team)}&scene=${encodeURIComponent(sceneName)}`,
+        { cache: "no-store" }
+      ).then((r) => r.json());
+      const raw: MappingRow[] = [];
+      if (d.success) {
+        for (const rec of d.records || []) {
+          const p = normalizeE2EProcessShortName(String(rec.fields["端到端流程"] || ""));
+          const s = String(rec.fields["流程环节"] || "").trim();
+          const n = String(rec.fields["流程节点"] || "").trim();
+          if (p || s || n) raw.push({ process: p, section: s, node: n });
+        }
+      }
+      const rows = dedupeMappingRows(raw);
+      setMappingRows(rows);
+      if (rows.length > 0) {
+        const first = rows[0];
+        setProcess(first.process);
+        setSection(first.section);
+        setNode(first.node);
+      } else {
+        const opt = teamScenes.find((s) => s.scene === sceneName);
+        if (opt) {
+          setProcess(normalizeE2EProcessShortName(opt.process));
+          setSection(opt.section);
+          setNode(opt.node);
+        } else {
+          setProcess("");
+          setSection("");
+          setNode("");
+        }
+      }
+    } finally {
+      setMappingLoading(false);
+    }
+  };
+
   const handleSceneSelect = (sceneName: string) => {
     setScene(sceneName);
-    const opt = teamScenes.find((s) => s.scene === sceneName);
-    if (opt) {
-      setProcess(opt.process);
-      setSection(opt.section);
-      setNode(opt.node);
+    if (!sceneName) {
+      setMappingRows([]);
+      setProcess("");
+      setSection("");
+      setNode("");
+      return;
+    }
+    void loadMappingForScene(sceneName);
+  };
+
+  const handleProcessChange = (v: string) => {
+    setProcess(v);
+    if (useTable1Options) {
+      const secs = mappingRows.filter((r) => r.process === v).map((r) => r.section);
+      const uniq = Array.from(new Set(secs.filter(Boolean)));
+      setSection(uniq[0] || "");
+      const nodes = mappingRows
+        .filter((r) => r.process === v && r.section === (uniq[0] || ""))
+        .map((r) => r.node);
+      const nuniq = Array.from(new Set(nodes.filter(Boolean)));
+      setNode(nuniq[0] || "");
+    } else {
+      setSection("");
+      setNode("");
+    }
+  };
+
+  const handleSectionChange = (v: string) => {
+    setSection(v);
+    if (useTable1Options) {
+      const nodes = mappingRows
+        .filter((r) => r.process === process && r.section === v)
+        .map((r) => r.node);
+      const nuniq = Array.from(new Set(nodes.filter(Boolean)));
+      setNode(nuniq[0] || "");
+    } else {
+      setNode("");
     }
   };
 
@@ -355,9 +586,8 @@ function DatasetForm({
   return (
     <Modal title="新增评测集" onClose={onClose}>
       <div className="space-y-3">
-        <div className="rounded border px-3 py-2 text-sm bg-gray-50 text-gray-600">{team}</div>
+        <div className="rounded-lg border border-gray-200 px-3 py-2 text-sm bg-gray-50 text-gray-600">{team}</div>
 
-        {/* 场景下拉（优先选场景） */}
         <div>
           <label className="text-xs text-gray-600 mb-1 block">绑定场景 *</label>
           <SelectWithChevron
@@ -371,22 +601,59 @@ function DatasetForm({
           </SelectWithChevron>
         </div>
 
-        {/* 级联补充（选场景后自动填，也可手动选） */}
+        {mappingLoading && (
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <Loader2 size={14} className="animate-spin" /> 正在加载流程节点映射…
+          </div>
+        )}
+
+        {!mappingLoading && scene && mappingRows.length === 0 && (
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            未在「流程节点映射」表中找到该场景的映射行，下方流程/环节/节点请从静态 E2E 结构中选择（创建时后端仍会按表 1 校验）。
+          </div>
+        )}
+
         <div className="grid md:grid-cols-3 gap-2">
-          <SelectWithChevron value={process} onChange={(v) => { setProcess(v); setSection(""); setNode(""); }} placeholder="E2E 流程">
-            {E2E_PROCESSES.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-          </SelectWithChevron>
-          <SelectWithChevron value={section} onChange={(v) => { setSection(v); setNode(""); }} placeholder="环节" disabled={!proc}>
-            {proc?.sections.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
-          </SelectWithChevron>
-          <SelectWithChevron value={node} onChange={setNode} placeholder="节点" disabled={!sec}>
-            {sec?.nodes.map((n) => <option key={n.id} value={n.name}>{n.name}</option>)}
-          </SelectWithChevron>
+          {useTable1Options ? (
+            <>
+              <SelectWithChevron value={process} onChange={handleProcessChange} placeholder="端到端流程">
+                {processOptionsTable.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </SelectWithChevron>
+              <SelectWithChevron
+                value={section}
+                onChange={handleSectionChange}
+                placeholder="流程环节"
+                disabled={!process}
+              >
+                {sectionOptionsTable.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </SelectWithChevron>
+              <SelectWithChevron value={node} onChange={setNode} placeholder="流程节点" disabled={!section}>
+                {nodeOptionsTable.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </SelectWithChevron>
+            </>
+          ) : (
+            <>
+              <SelectWithChevron value={process} onChange={(v) => { setProcess(v); setSection(""); setNode(""); }} placeholder="E2E 流程">
+                {E2E_PROCESSES.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </SelectWithChevron>
+              <SelectWithChevron value={section} onChange={(v) => { setSection(v); setNode(""); }} placeholder="环节" disabled={!procStatic}>
+                {procStatic?.sections.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </SelectWithChevron>
+              <SelectWithChevron value={node} onChange={setNode} placeholder="节点" disabled={!secStatic}>
+                {secStatic?.nodes.map((n) => <option key={n.id} value={n.name}>{n.name}</option>)}
+              </SelectWithChevron>
+            </>
+          )}
         </div>
 
-        {/* 自动名称预览 */}
         {autoName && (
-          <div className="rounded border border-dashed border-teal-300 bg-teal-50 px-3 py-2 text-xs text-teal-700">
+          <div className="rounded-lg border border-dashed border-teal-300 bg-teal-50/80 px-3 py-2 text-xs text-teal-800">
             自动命名：<b>{autoName}</b>
           </div>
         )}
@@ -396,18 +663,19 @@ function DatasetForm({
           onChange={(e) => setCoverage(e.target.value)}
           placeholder="评测集覆盖范围：时间、主体范围、样本口径等 *"
           rows={3}
-          className="w-full rounded border px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300"
         />
 
-        {/* 场景筛选结果显示 */}
-        {node && filteredScenes.length > 0 && !scene && (
-          <div className="text-xs text-gray-500">该节点下有 {filteredScenes.length} 个场景，请在上方选择</div>
-        )}
-
-        <textarea value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="备注" rows={2} className="w-full rounded border px-3 py-2 text-sm" />
-        <div className="flex justify-end gap-2">
+        <textarea
+          value={remark}
+          onChange={(e) => setRemark(e.target.value)}
+          placeholder="备注"
+          rows={2}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300"
+        />
+        <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" onClick={onClose}>取消</Button>
-          <Button onClick={submit} disabled={!team || !scene || !coverage} className="bg-teal-600 hover:bg-teal-700">创建</Button>
+          <Button onClick={submit} disabled={!team || !scene || !coverage || mappingLoading} className="bg-teal-600 hover:bg-teal-700">创建</Button>
         </div>
       </div>
     </Modal>
@@ -418,11 +686,13 @@ function DatasetForm({
 function MaterialForm({
   dataset,
   existingMaterials,
+  uploadStorage,
   onClose,
   onDone,
 }: {
   dataset: Dataset;
   existingMaterials: Material[];
+  uploadStorage: UploadStorage;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -463,8 +733,12 @@ function MaterialForm({
     onDone();
   };
 
+  const materialModalTitle = dataset.coverage?.trim()
+    ? `A/C 资料管理：${dataset.coverage} — ${dataset.name}`
+    : `A/C 资料管理：${dataset.name}`;
+
   return (
-    <Modal title={`A/C 资料管理：${dataset.name}`} onClose={onClose}>
+    <Modal title={materialModalTitle} onClose={onClose}>
       <div className="space-y-4">
         {/* 历史资料预览 */}
         {localMaterials.length > 0 && (
@@ -503,7 +777,7 @@ function MaterialForm({
             <UploadCloud size={13} /> 追加 - 输入A样本
           </div>
           <input value={linkA} onChange={(e) => setLinkA(e.target.value)} placeholder="飞书云文档链接（可选）" className="w-full rounded border px-3 py-2 text-sm mb-2" />
-          <MultiFileUploader label="本地文件（可多选）" uploaded={filesA} onUpload={setFilesA} />
+          <MultiFileUploader label="本地文件（可多选）" storage={uploadStorage} uploaded={filesA} onUpload={setFilesA} />
         </div>
 
         {/* 新上传 C 结果 */}
@@ -512,7 +786,7 @@ function MaterialForm({
             <UploadCloud size={13} /> 追加 - 人工输出C结果
           </div>
           <input value={linkC} onChange={(e) => setLinkC(e.target.value)} placeholder="飞书云文档链接（可选）" className="w-full rounded border px-3 py-2 text-sm mb-2" />
-          <MultiFileUploader label="本地文件（可多选）" uploaded={filesC} onUpload={setFilesC} />
+          <MultiFileUploader label="本地文件（可多选）" storage={uploadStorage} uploaded={filesC} onUpload={setFilesC} />
         </div>
 
         <div className="flex justify-end gap-2">
@@ -735,12 +1009,12 @@ function SelectWithChevron({
   );
 }
 
-function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+function Modal({ title, children, onClose }: { title: ReactNode; children: ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-auto">
-        <div className="px-5 py-3 border-b flex items-center sticky top-0 bg-white z-10">
-          <div className="font-semibold">{title}</div>
+        <div className="px-5 py-3 border-b flex items-start gap-2 sticky top-0 bg-white z-10">
+          <div className="font-semibold text-sm sm:text-base leading-snug pr-2 flex-1 min-w-0 break-words">{title}</div>
           <div className="flex-1" />
           <button onClick={onClose}><X size={16} /></button>
         </div>

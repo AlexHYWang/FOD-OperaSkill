@@ -13,6 +13,7 @@ import {
 } from "@/lib/feishu";
 import { getSession } from "@/lib/session";
 import { isAdminUser } from "@/lib/user-profile";
+import { makeBitableFilter } from "@/lib/record-utils";
 
 const TABLE_ENV_MAP: Record<string, string> = {
   "1": "FEISHU_TABLE1_ID",
@@ -48,13 +49,19 @@ export async function GET(request: NextRequest) {
   const tableNum = searchParams.get("table") || "1";
   const team = searchParams.get("team");
   const taskName = searchParams.get("task");
+  const scene = searchParams.get("scene");
 
   try {
     const { appToken, tableId } = getTableConfig(tableNum);
 
     let filter: string | undefined;
     if (team && tableNum === "1") {
-      filter = `CurrentValue.[团队名称]="${team}"`;
+      filter = makeBitableFilter([
+        `CurrentValue.[团队名称]="${team}"`,
+        scene
+          ? `OR(CurrentValue.[场景名称]="${scene}",CurrentValue.[任务名称]="${scene}")`
+          : undefined,
+      ]);
     } else if (team && taskName && tableNum === "2") {
       filter = `AND(CurrentValue.[团队名称]="${team}",CurrentValue.[所属场景]="${taskName}")`;
     } else if (team && tableNum === "2") {

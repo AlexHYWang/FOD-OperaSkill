@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Upload, CheckCircle2, XCircle, Loader2, File, X, AlertTriangle } from "lucide-react";
+import { Upload, CheckCircle2, XCircle, Loader2, File, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface UploadedFile {
@@ -11,6 +11,13 @@ export interface UploadedFile {
   file_size: number;
 }
 
+export type UploadStorage = "vercel-blob" | "feishu-api";
+
+function blobPathname(file: File): string {
+  const safe = file.name.replace(/[/\\]/g, "_").slice(0, 180);
+  return `eval-materials/${Date.now()}-${safe}`;
+}
+
 // ─── 单文件上传组件 ───
 interface FileUploaderProps {
   label: string;
@@ -18,6 +25,9 @@ interface FileUploaderProps {
   accept?: string;
   purpose?: "common" | "skill";
   maxSizeMB?: number;
+  /** 默认 feishu-api；评测集在开启 NEXT_PUBLIC_BLOB_UPLOAD_ENABLED 时用 vercel-blob */
+  storage?: UploadStorage;
+  handleBlobUploadUrl?: string;
   onUpload: (result: UploadedFile) => void;
   uploaded?: UploadedFile | null;
   disabled?: boolean;
@@ -32,7 +42,12 @@ function formatSize(bytes: number): string {
 
 async function uploadFile(
   file: File,
-  options: { purpose?: "common" | "skill"; maxSizeMB?: number } = {}
+  options: {
+    purpose?: "common" | "skill";
+    maxSizeMB?: number;
+    storage?: UploadStorage;
+    handleBlobUploadUrl?: string;
+  } = {}
 ): Promise<UploadedFile> {
   const maxSizeMB = options.maxSizeMB ?? (options.purpose === "skill" ? 200 : 100);
   if (options.purpose === "skill" && !file.name.toLowerCase().endsWith(".zip")) {
@@ -41,12 +56,56 @@ async function uploadFile(
   if (file.size > maxSizeMB * 1024 * 1024) {
     throw new Error(`文件「${file.name}」超过 ${maxSizeMB}MB 限制，请压缩后重试`);
   }
+
+  const storage = options.storage ?? "feishu-api";
+  if (storage === "vercel-blob") {
+    const { upload } = await import("@vercel/blob/client");
+    const handleUrl = options.handleBlobUploadUrl ?? "/api/upload/blob";
+    try {
+      const result = await upload(blobPathname(file), file, {
+        access: "public",
+        handleUploadUrl: handleUrl,
+        multipart: file.size >= 8 * 1024 * 1024,
+      });
+      return {
+        file_token: "",
+        url: result.url,
+        file_name: file.name,
+        file_size: file.size,
+      };
+    } catch (err) {
+      const msg = String(err);
+      if (/请先登录|401/.test(msg)) throw new Error("请先登录后再上传");
+      if (/503|BLOB_READ_WRITE_TOKEN|未配置/.test(msg)) {
+        throw new Error("Blob 未配置：请在环境变量中设置 BLOB_READ_WRITE_TOKEN，或暂时关闭 NEXT_PUBLIC_BLOB_UPLOAD_ENABLED");
+      }
+      throw err instanceof Error ? err : new Error(msg);
+    }
+  }
+
   const formData = new FormData();
   formData.append("file", file);
   formData.append("purpose", options.purpose || "common");
   const res = await fetch("/api/upload", { method: "POST", body: formData });
-  const data = await res.json();
-  if (!res.ok || !data.success) throw new Error(data.error || "上传失败");
+  const raw = await res.text();
+  let data: { success?: boolean; error?: string } & Partial<UploadedFile> = {};
+  try {
+    data = raw ? (JSON.parse(raw) as typeof data) : {};
+  } catch {
+    data = {};
+  }
+  if (!res.ok || !data.success) {
+    if (res.status === 413) {
+      throw new Error(
+        `文件「${file.name}」经服务端转发上传失败（请求体过大）。请在 Vercel 配置 BLOB_READ_WRITE_TOKEN 并设置 NEXT_PUBLIC_BLOB_UPLOAD_ENABLED=1 以启用直传。`
+      );
+    }
+    if (raw && !data.error) {
+      const brief = raw.length > 120 ? `${raw.slice(0, 120)}...` : raw;
+      throw new Error(`上传失败（HTTP ${res.status}）：${brief}`);
+    }
+    throw new Error(data.error || `上传失败（HTTP ${res.status}）`);
+  }
   return data as UploadedFile;
 }
 
@@ -56,6 +115,8 @@ export function FileUploader({
   accept,
   purpose,
   maxSizeMB,
+  storage = "feishu-api",
+  handleBlobUploadUrl,
   onUpload,
   uploaded,
   disabled,
@@ -71,7 +132,7 @@ export function FileUploader({
     setError(null);
     setUploading(true);
     try {
-      const result = await uploadFile(file, { purpose, maxSizeMB });
+      const result = await uploadFile(file, { purpose, maxSizeMB, storage, handleBlobUploadUrl });
       onUpload(result);
     } catch (err) {
       setError(String(err));
@@ -104,7 +165,8 @@ export function FileUploader({
               {uploaded.file_name}
             </div>
             <div className="text-xs text-green-600">
-              {formatSize(uploaded.file_size)} · 已上传到飞书云盘
+              {formatSize(uploaded.file_size)} ·{" "}
+              {uploaded.file_token ? "已上传到飞书云盘" : "已上传"}
             </div>
           </div>
           {!disabled && (
@@ -194,6 +256,8 @@ interface MultiFileUploaderProps {
   accept?: string;
   purpose?: "common" | "skill";
   maxSizeMB?: number;
+  storage?: UploadStorage;
+  handleBlobUploadUrl?: string;
   onUpload: (results: UploadedFile[]) => void;
   uploaded?: UploadedFile[];
   disabled?: boolean;
@@ -206,6 +270,8 @@ export function MultiFileUploader({
   accept,
   purpose,
   maxSizeMB,
+  storage = "feishu-api",
+  handleBlobUploadUrl,
   onUpload,
   uploaded = [],
   disabled,
@@ -226,7 +292,7 @@ export function MultiFileUploader({
     const results: UploadedFile[] = [];
     try {
       for (let i = 0; i < arr.length; i++) {
-        const result = await uploadFile(arr[i], { purpose, maxSizeMB });
+        const result = await uploadFile(arr[i], { purpose, maxSizeMB, storage, handleBlobUploadUrl });
         results.push(result);
         setProgress({ done: i + 1, total: arr.length });
       }

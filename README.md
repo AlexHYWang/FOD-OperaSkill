@@ -39,6 +39,7 @@ Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
 | MiMo API | AI 报告校验 |
 | iron-session | Cookie Session 管理 |
 | Vercel | 部署 |
+| Vercel Blob（可选） | 评测集等大文件**浏览器直传对象存储**，绕开 Serverless 请求体网关限制 |
 
 ## 快速开始
 
@@ -108,6 +109,16 @@ npm run dev
 3. 在 Vercel 项目设置中配置所有环境变量（同 `.env.local`）
 4. 部署完成后在飞书开放平台添加 Vercel 域名为 OAuth 回调地址
 5. 阿里云注册域名，添加 CNAME 记录指向 Vercel 提供的地址
+
+### 评测集资料：Vercel Blob 直传（推荐生产开启）
+
+评测集 A/C 本地上传若经 `POST /api/upload` 把整文件打进 Serverless，在 Vercel 上容易触发**网关请求体上限**（与页面「单文件 100MB」文案无关）。开启 Blob 后，文件从浏览器直传 [Vercel Blob](https://vercel.com/docs/storage/vercel-blob/client-upload)，服务端路由 [`app/api/upload/blob/route.ts`](app/api/upload/blob/route.ts) 仅负责换票与登录校验（`handleUpload`），请求体极小。
+
+1. 在 Vercel 项目 **Storage** 中创建 Blob Store，会自动注入 **`BLOB_READ_WRITE_TOKEN`**（只存在于服务端，勿提交到仓库）。
+2. 在环境变量中增加 **`NEXT_PUBLIC_BLOB_UPLOAD_ENABLED=1`**，使评测集页使用 Blob 模式；未设置或不为 `1` 时，评测集上传仍走飞书云盘 `POST /api/upload`（适合本地开发）。
+3. 确保生产域名下 **`/api/upload/blob`** 可访问（与主站同域即可）。
+
+说明：Vercel 对经 Serverless 转发的**大请求体**仍可能有限制；网关体积类说明请见本文档，**勿**在上传组件内展示换色警示文案以免影响界面。
 
 ## 内置资源
 
