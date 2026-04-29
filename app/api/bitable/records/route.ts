@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
     const record = await addRecord(appToken, tableId, enrichedFields);
     return NextResponse.json({ success: true, record });
   } catch (err) {
+    console.error("[records] POST 失败:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
@@ -126,6 +127,7 @@ export async function PATCH(request: NextRequest) {
     const record = await updateRecord(appToken, tableId, recordId, fields);
     return NextResponse.json({ success: true, record });
   } catch (err) {
+    console.error("[records] PATCH 失败:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

@@ -364,13 +364,17 @@ export function NodeMappingGrid({
             流程环节: addState.sectionName,
             流程节点: addState.nodeName,
             场景名称: name,
-            任务名称: name,
             标签: labelText,
             ...paradigmField,
           },
         }),
       });
       const d = await r.json();
+      if (!r.ok || !d.success) {
+        alert(typeof d.error === "string" ? d.error : "保存失败，请稍后重试");
+        setAddState((prev) => prev && { ...prev, saving: false });
+        return;
+      }
       const recordId = d.record?.record_id || d.record?.id;
       setNodeTasksMap((prev) => ({
         ...prev,
@@ -393,6 +397,7 @@ export function NodeMappingGrid({
       setTimeout(() => setPostSaveHint(null), 5000);
     } catch (err) {
       console.error(err);
+      alert("保存失败，请检查网络后重试");
       setAddState((prev) => prev && { ...prev, saving: false });
     }
   };
@@ -500,13 +505,15 @@ export function NodeMappingGrid({
               流程环节: sectionName,
               流程节点: nodeName,
               场景名称: row.taskName.trim(),
-              任务名称: row.taskName.trim(),
               标签: labelText,
               ...pField,
             },
           }),
         });
         const d = await r.json();
+        if (!r.ok || !d.success) {
+          throw new Error(typeof d.error === "string" ? d.error : `HTTP ${r.status}`);
+        }
         const recordId = d.record?.record_id || d.record?.id;
         newRows.push({
           ...row,
@@ -525,7 +532,9 @@ export function NodeMappingGrid({
       setPostSaveHint({ nodeId, count: newRows.length });
       setTimeout(() => setSaveStatus((prev) => ({ ...prev, [nodeId]: null })), 3000);
       setTimeout(() => setPostSaveHint(null), 5000);
-    } catch {
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : "批量保存失败");
       setSaveStatus((prev) => ({ ...prev, [nodeId]: "error" }));
     } finally {
       setSaving((prev) => ({ ...prev, [nodeId]: false }));
