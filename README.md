@@ -110,13 +110,15 @@ npm run dev
 4. 部署完成后在飞书开放平台添加 Vercel 域名为 OAuth 回调地址
 5. 阿里云注册域名，添加 CNAME 记录指向 Vercel 提供的地址
 
-### 评测集资料：Vercel Blob 直传（推荐生产开启）
+### 评测集资料：飞书分片上传（默认）与 Vercel Blob 直传（可选）
 
 评测集 A/C 本地上传若经 `POST /api/upload` 把整文件打进 Serverless，在 Vercel 上容易触发**网关请求体上限**（与页面「单文件 100MB」文案无关）。开启 Blob 后，文件从浏览器直传 [Vercel Blob](https://vercel.com/docs/storage/vercel-blob/client-upload)，服务端路由 [`app/api/upload/blob/route.ts`](app/api/upload/blob/route.ts) 仅负责换票与登录校验（`handleUpload`），请求体极小。
 
-1. 在 Vercel 项目 **Storage** 中创建 Blob Store，会自动注入 **`BLOB_READ_WRITE_TOKEN`**（只存在于服务端，勿提交到仓库）。
-2. 在环境变量中增加 **`NEXT_PUBLIC_BLOB_UPLOAD_ENABLED=1`**，使评测集页使用 Blob 模式；未设置或不为 `1` 时，评测集上传仍走飞书云盘 `POST /api/upload`（适合本地开发）。
-3. 确保生产域名下 **`/api/upload/blob`** 可访问（与主站同域即可）。
+当前评测集页默认使用更稳的 **飞书分片上传**：浏览器按飞书返回的分片大小逐片调用 `/api/upload/chunked/*`，每次请求只携带一个分片，服务端再转发到飞书云盘 `upload_prepare / upload_part / upload_finish`。这样既绕开 Vercel 大请求体限制，也不依赖浏览器直连 Vercel Blob 存储域。
+
+1. 默认无需新增环境变量，只需继续配置 **`FEISHU_DRIVE_FOLDER_TOKEN`**。
+2. 若要改回 Blob 直传，在 Vercel 项目 **Storage** 中创建 Blob Store，会自动注入 **`BLOB_READ_WRITE_TOKEN`**（只存在于服务端，勿提交到仓库），并设置 **`NEXT_PUBLIC_EVALUATION_UPLOAD_STORAGE=vercel-blob`**。
+3. Blob 模式下需确保生产域名的 **`/api/upload/blob`** 可访问（与主站同域即可）。注意：`/api/upload/blob → 200` 只代表换票成功，不代表浏览器到 Blob 存储域的实际文件上传完成。
 
 说明：Vercel 对经 Serverless 转发的**大请求体**仍可能有限制；网关体积类说明请见本文档，**勿**在上传组件内展示换色警示文案以免影响界面。
 

@@ -32,7 +32,11 @@ import { E2E_PROCESSES, normalizeE2EProcessShortName } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const EVALUATION_UPLOAD_STORAGE: UploadStorage =
-  process.env.NEXT_PUBLIC_BLOB_UPLOAD_ENABLED === "1" ? "vercel-blob" : "feishu-api";
+  process.env.NEXT_PUBLIC_EVALUATION_UPLOAD_STORAGE === "vercel-blob"
+    ? "vercel-blob"
+    : process.env.NEXT_PUBLIC_EVALUATION_UPLOAD_STORAGE === "feishu-api"
+      ? "feishu-api"
+      : "feishu-chunked";
 
 interface Dataset {
   id: string;
@@ -702,9 +706,12 @@ function MaterialForm({
   const [linkC, setLinkC] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [localMaterials, setLocalMaterials] = useState<Material[]>(existingMaterials);
+  const [uploadingA, setUploadingA] = useState(false);
+  const [uploadingC, setUploadingC] = useState(false);
 
   const existingA = localMaterials.filter((m) => m.panel === "输入A样本");
   const existingC = localMaterials.filter((m) => m.panel === "人工输出C结果");
+  const hasUploading = uploadingA || uploadingC;
 
   const deleteMaterial = async (id: string) => {
     setDeleting(id);
@@ -777,7 +784,13 @@ function MaterialForm({
             <UploadCloud size={13} /> 追加 - 输入A样本
           </div>
           <input value={linkA} onChange={(e) => setLinkA(e.target.value)} placeholder="飞书云文档链接（可选）" className="w-full rounded border px-3 py-2 text-sm mb-2" />
-          <MultiFileUploader label="本地文件（可多选）" storage={uploadStorage} uploaded={filesA} onUpload={setFilesA} />
+          <MultiFileUploader
+            label="本地文件（可多选）"
+            storage={uploadStorage}
+            uploaded={filesA}
+            onUpload={setFilesA}
+            onUploadingChange={setUploadingA}
+          />
         </div>
 
         {/* 新上传 C 结果 */}
@@ -786,17 +799,23 @@ function MaterialForm({
             <UploadCloud size={13} /> 追加 - 人工输出C结果
           </div>
           <input value={linkC} onChange={(e) => setLinkC(e.target.value)} placeholder="飞书云文档链接（可选）" className="w-full rounded border px-3 py-2 text-sm mb-2" />
-          <MultiFileUploader label="本地文件（可多选）" storage={uploadStorage} uploaded={filesC} onUpload={setFilesC} />
+          <MultiFileUploader
+            label="本地文件（可多选）"
+            storage={uploadStorage}
+            uploaded={filesC}
+            onUpload={setFilesC}
+            onUploadingChange={setUploadingC}
+          />
         </div>
 
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>取消</Button>
           <Button
             onClick={submit}
-            disabled={!linkA && filesA.length === 0 && !linkC && filesC.length === 0}
+            disabled={hasUploading || (!linkA && filesA.length === 0 && !linkC && filesC.length === 0)}
             className="bg-teal-600 hover:bg-teal-700"
           >
-            保存资料
+            {hasUploading ? "上传完成后可保存" : "保存资料"}
           </Button>
         </div>
       </div>

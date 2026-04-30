@@ -28,7 +28,22 @@ export interface UploadedFile {
   file_size: number;
 }
 
-export type UploadStorage = "vercel-blob" | "feishu-api";
+export type UploadStorage = "vercel-blob" | "feishu-api" | "feishu-chunked";
+
+type UploadStatus = "pending" | "uploading" | "success" | "error" | "cancelled";
+
+interface UploadTask {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  status: UploadStatus;
+  stage: string;
+  progress: number;
+  attempt: number;
+  error?: string;
+}
+
+type UploadStageHandler = (stage: string, progress?: number) => void;
 
 function blobPathname(file: File): string {
   const safe = file.name.replace(/[/\\]/g, "_").slice(0, 180);
@@ -42,7 +57,7 @@ interface FileUploaderProps {
   accept?: string;
   purpose?: "common" | "skill";
   maxSizeMB?: number;
-  /** 默认 feishu-api；评测集在开启 NEXT_PUBLIC_BLOB_UPLOAD_ENABLED 时用 vercel-blob */
+  /** 默认 feishu-api；评测集页默认传入 feishu-chunked */
   storage?: UploadStorage;
   handleBlobUploadUrl?: string;
   onUpload: (result: UploadedFile) => void;
@@ -57,6 +72,153 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function storageLabel(storage: UploadStorage): string {
+  if (storage === "feishu-chunked") return "飞书分片上传";
+  if (storage === "vercel-blob") return "Vercel Blob 直传";
+  return "飞书云盘上传";
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isAbortError(err: unknown): boolean {
+  const msg = String(err);
+  return msg.includes("AbortError") || msg.includes("aborted") || msg.includes("已取消");
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
+  const raw = await res.text();
+  let data: { success?: boolean; error?: string; code?: string } & Partial<T> = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = {};
+  }
+  if (!res.ok || data.success === false) {
+    const detail = data.error || (raw ? raw.slice(0, 160) : `HTTP ${res.status}`);
+    throw new Error(detail);
+  }
+  return data as T;
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+  parentSignal?: AbortSignal
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort("上传超时"), timeoutMs);
+  const onAbort = () => controller.abort(parentSignal?.reason || "已取消上传");
+  if (parentSignal) {
+    if (parentSignal.aborted) onAbort();
+    else parentSignal.addEventListener("abort", onAbort, { once: true });
+  }
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+    parentSignal?.removeEventListener("abort", onAbort);
+  }
+}
+
+function signalWithTimeout(parentSignal: AbortSignal | undefined, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort("上传超时"), timeoutMs);
+  const onAbort = () => controller.abort(parentSignal?.reason || "已取消上传");
+  if (parentSignal) {
+    if (parentSignal.aborted) onAbort();
+    else parentSignal.addEventListener("abort", onAbort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      window.clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+async function uploadFileViaChunked(
+  file: File,
+  options: {
+    purpose?: "common" | "skill";
+    signal?: AbortSignal;
+    onStage?: UploadStageHandler;
+  }
+): Promise<UploadedFile> {
+  options.onStage?.("初始化上传", 2);
+  const prepareRes = await fetchWithTimeout(
+    "/api/upload/chunked/prepare",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileSize: file.size,
+        purpose: options.purpose || "common",
+      }),
+    },
+    45_000,
+    options.signal
+  );
+  const prepared = await parseJsonResponse<{
+    uploadId: string;
+    blockSize: number;
+    blockNum: number;
+  }>(prepareRes);
+
+  const blockSize = Math.max(1, prepared.blockSize);
+  const blockNum = Math.max(1, prepared.blockNum);
+  for (let i = 0; i < blockNum; i++) {
+    const start = i * blockSize;
+    const end = Math.min(start + blockSize, file.size);
+    const chunk = file.slice(start, end);
+    const formData = new FormData();
+    formData.append("uploadId", prepared.uploadId);
+    formData.append("seq", String(i));
+    formData.append("fileName", file.name);
+    formData.append("mimeType", file.type || "application/octet-stream");
+    formData.append("chunk", chunk, file.name);
+    const progress = Math.round(((i + 0.5) / blockNum) * 90);
+    options.onStage?.(`上传分片 ${i + 1}/${blockNum}`, progress);
+    const partRes = await fetchWithTimeout(
+      "/api/upload/chunked/part",
+      { method: "POST", body: formData },
+      90_000,
+      options.signal
+    );
+    await parseJsonResponse<{ seq: number }>(partRes);
+    options.onStage?.(`上传分片 ${i + 1}/${blockNum}`, Math.round(((i + 1) / blockNum) * 90));
+  }
+
+  options.onStage?.("等待完成", 94);
+  const finishRes = await fetchWithTimeout(
+    "/api/upload/chunked/finish",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uploadId: prepared.uploadId,
+        blockNum,
+        fileName: file.name,
+        fileSize: file.size,
+      }),
+    },
+    60_000,
+    options.signal
+  );
+  const data = await parseJsonResponse<UploadedFile>(finishRes);
+  options.onStage?.("成功", 100);
+  return data;
+}
+
 async function uploadFile(
   file: File,
   options: {
@@ -64,6 +226,8 @@ async function uploadFile(
     maxSizeMB?: number;
     storage?: UploadStorage;
     handleBlobUploadUrl?: string;
+    signal?: AbortSignal;
+    onStage?: UploadStageHandler;
   } = {}
 ): Promise<UploadedFile> {
   const maxSizeMB = options.maxSizeMB ?? (options.purpose === "skill" ? 200 : 100);
@@ -75,14 +239,29 @@ async function uploadFile(
   }
 
   const storage = options.storage ?? "feishu-api";
+  if (storage === "feishu-chunked") {
+    return uploadFileViaChunked(file, {
+      purpose: options.purpose,
+      signal: options.signal,
+      onStage: options.onStage,
+    });
+  }
+
   if (storage === "vercel-blob") {
     const handleUrl = options.handleBlobUploadUrl ?? "/api/upload/blob";
+    const timedSignal = signalWithTimeout(options.signal, 90_000);
     try {
+      options.onStage?.("直连 Blob 存储上传", 5);
       const result = await vercelBlobUpload(blobPathname(file), file, {
         access: "public",
         handleUploadUrl: handleUrl,
-        multipart: file.size >= 8 * 1024 * 1024,
+        multipart: true,
+        abortSignal: timedSignal.signal,
+        onUploadProgress: ({ percentage }) => {
+          options.onStage?.("直连 Blob 存储上传", Math.max(5, Math.round(percentage)));
+        },
       });
+      options.onStage?.("成功", 100);
       return {
         file_token: "",
         url: result.url,
@@ -101,16 +280,24 @@ async function uploadFile(
       }
       if (/请先登录|401/.test(msg)) throw new Error("请先登录后再上传");
       if (/503|BLOB_READ_WRITE_TOKEN|未配置/.test(msg)) {
-        throw new Error("Blob 未配置：请在环境变量中设置 BLOB_READ_WRITE_TOKEN，或暂时关闭 NEXT_PUBLIC_BLOB_UPLOAD_ENABLED");
+        throw new Error("Blob 未配置：请设置 BLOB_READ_WRITE_TOKEN，或将评测集上传模式切回默认的 feishu-chunked");
       }
       throw err instanceof Error ? err : new Error(msg);
+    } finally {
+      timedSignal.cleanup();
     }
   }
 
+  options.onStage?.("服务端转发上传", 10);
   const formData = new FormData();
   formData.append("file", file);
   formData.append("purpose", options.purpose || "common");
-  const res = await fetch("/api/upload", { method: "POST", body: formData });
+  const res = await fetchWithTimeout(
+    "/api/upload",
+    { method: "POST", body: formData },
+    120_000,
+    options.signal
+  );
   const raw = await res.text();
   let data: { success?: boolean; error?: string } & Partial<UploadedFile> = {};
   try {
@@ -121,7 +308,7 @@ async function uploadFile(
   if (!res.ok || !data.success) {
     if (res.status === 413) {
       throw new Error(
-        `文件「${file.name}」经服务端转发上传失败（请求体过大）。请在 Vercel 配置 BLOB_READ_WRITE_TOKEN 并设置 NEXT_PUBLIC_BLOB_UPLOAD_ENABLED=1 以启用直传。`
+        `文件「${file.name}」经服务端转发上传失败（请求体过大）。评测集资料请使用默认的飞书分片上传模式，或检查当前组件是否仍在使用 feishu-api。`
       );
     }
     if (raw && !data.error) {
@@ -283,6 +470,7 @@ interface MultiFileUploaderProps {
   storage?: UploadStorage;
   handleBlobUploadUrl?: string;
   onUpload: (results: UploadedFile[]) => void;
+  onUploadingChange?: (uploading: boolean) => void;
   uploaded?: UploadedFile[];
   disabled?: boolean;
   required?: boolean;
@@ -297,40 +485,156 @@ export function MultiFileUploader({
   storage = "feishu-api",
   handleBlobUploadUrl,
   onUpload,
+  onUploadingChange,
   uploaded = [],
   disabled,
   required,
 }: MultiFileUploaderProps) {
   const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [tasks, setTasks] = useState<UploadTask[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const filesRef = useRef<Map<string, File>>(new Map());
+  const controllersRef = useRef<Map<string, AbortController>>(new Map());
+
+  const updateTask = (id: string, patch: Partial<UploadTask>) => {
+    setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, ...patch } : task)));
+  };
+
+  const runUploadTask = async (
+    task: UploadTask,
+    results: UploadedFile[],
+    baseUploaded: UploadedFile[]
+  ) => {
+    const file = filesRef.current.get(task.id);
+    if (!file) return;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const controller = new AbortController();
+      controllersRef.current.set(task.id, controller);
+      updateTask(task.id, {
+        status: "uploading",
+        stage: attempt === 1 ? "准备上传" : `重试中 ${attempt}/3`,
+        progress: 0,
+        attempt,
+        error: undefined,
+      });
+
+      try {
+        const result = await uploadFile(file, {
+          purpose,
+          maxSizeMB,
+          storage,
+          handleBlobUploadUrl,
+          signal: controller.signal,
+          onStage: (stage, progressValue) => {
+            updateTask(task.id, {
+              stage,
+              progress: progressValue ?? task.progress,
+            });
+          },
+        });
+        results.push(result);
+        updateTask(task.id, {
+          status: "success",
+          stage: "成功",
+          progress: 100,
+          error: undefined,
+        });
+        onUpload([...baseUploaded, ...results]);
+        return;
+      } catch (err) {
+        const msg = isAbortError(err) ? "已取消上传" : errorMessage(err);
+        if (isAbortError(err)) {
+          updateTask(task.id, {
+            status: "cancelled",
+            stage: "已取消",
+            error: msg,
+          });
+          return;
+        }
+        if (attempt < 3) {
+          updateTask(task.id, {
+            stage: `上传失败，${attempt + 1}/3 即将重试`,
+            error: msg,
+          });
+          await sleep(800 * attempt);
+          continue;
+        }
+        updateTask(task.id, {
+          status: "error",
+          stage: "失败",
+          error: msg,
+        });
+        return;
+      } finally {
+        controllersRef.current.delete(task.id);
+      }
+    }
+  };
+
+  const runUploadQueue = async (uploadTasks: UploadTask[]) => {
+    setUploading(true);
+    onUploadingChange?.(true);
+    setError(null);
+    const results: UploadedFile[] = [];
+    const baseUploaded = uploaded;
+    let cursor = 0;
+    const workerCount = Math.min(2, uploadTasks.length);
+
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (cursor < uploadTasks.length) {
+        const task = uploadTasks[cursor++];
+        await runUploadTask(task, results, baseUploaded);
+      }
+    });
+
+    await Promise.all(workers);
+    setUploading(false);
+    onUploadingChange?.(false);
+  };
 
   const handleFiles = async (files: FileList | File[]) => {
     const arr = Array.from(files);
     if (arr.length === 0) return;
     setError(null);
-    setUploading(true);
-    setProgress({ done: 0, total: arr.length });
-    const results: UploadedFile[] = [];
-    try {
-      for (let i = 0; i < arr.length; i++) {
-        const result = await uploadFile(arr[i], { purpose, maxSizeMB, storage, handleBlobUploadUrl });
-        results.push(result);
-        setProgress({ done: i + 1, total: arr.length });
-      }
-      onUpload([...uploaded, ...results]);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setUploading(false);
-      setProgress(null);
-    }
+    const uploadTasks = arr.map((file, index) => {
+      const id = `${Date.now()}-${index}-${file.name}`;
+      filesRef.current.set(id, file);
+      return {
+        id,
+        fileName: file.name,
+        fileSize: file.size,
+        status: "pending" as UploadStatus,
+        stage: "准备上传",
+        progress: 0,
+        attempt: 0,
+      };
+    });
+    setTasks(uploadTasks);
+    await runUploadQueue(uploadTasks);
   };
 
   const removeFile = (idx: number) => {
     onUpload(uploaded.filter((_, i) => i !== idx));
+  };
+
+  const cancelUploads = () => {
+    controllersRef.current.forEach((controller) => controller.abort("已取消上传"));
+  };
+
+  const retryFailed = async () => {
+    const failed = tasks.filter((task) => task.status === "error" && filesRef.current.has(task.id));
+    if (failed.length === 0) return;
+    setTasks((prev) =>
+      prev.map((task) =>
+        failed.some((f) => f.id === task.id)
+          ? { ...task, status: "pending", stage: "准备上传", progress: 0, error: undefined }
+          : task
+      )
+    );
+    await runUploadQueue(failed.map((task) => ({ ...task, status: "pending", stage: "准备上传", progress: 0 })));
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -392,17 +696,55 @@ export function MultiFileUploader({
           error && "border-red-400 bg-red-50"
         )}
       >
-        {uploading && progress ? (
-          <div className="flex flex-col items-center gap-2 w-full">
-            <Loader2 size={20} className="text-blue-500 animate-spin" />
-            <span className="text-sm text-blue-600">
-              上传中 {progress.done}/{progress.total}...
-            </span>
-            <div className="w-full bg-gray-200 rounded-full h-1.5">
-              <div
-                className="bg-blue-500 h-1.5 rounded-full transition-all"
-                style={{ width: `${(progress.done / progress.total) * 100}%` }}
-              />
+        {uploading || tasks.length > 0 ? (
+          <div className="flex flex-col gap-2 w-full">
+            <div className="flex items-center justify-center gap-2 text-sm text-blue-600">
+              {uploading && <Loader2 size={18} className="animate-spin" />}
+              <span>
+                {uploading
+                  ? `上传中 ${tasks.filter((t) => t.status === "success").length}/${tasks.length}...`
+                  : `已完成 ${tasks.filter((t) => t.status === "success").length}/${tasks.length}`}
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {tasks.map((task) => (
+                <div key={task.id} className="rounded border bg-white/70 px-2 py-1.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    {task.status === "uploading" && <Loader2 size={12} className="animate-spin text-blue-500" />}
+                    {task.status === "success" && <CheckCircle2 size={12} className="text-green-500" />}
+                    {task.status === "error" && <XCircle size={12} className="text-red-500" />}
+                    {task.status === "cancelled" && <XCircle size={12} className="text-gray-400" />}
+                    <span className="flex-1 truncate text-gray-700">{task.fileName}</span>
+                    <span className="text-gray-400">{formatSize(task.fileSize)}</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <div className="h-1.5 flex-1 rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          task.status === "error" ? "bg-red-400" : task.status === "success" ? "bg-green-500" : "bg-blue-500"
+                        )}
+                        style={{ width: `${Math.max(0, Math.min(100, task.progress))}%` }}
+                      />
+                    </div>
+                    <span className={cn("w-24 truncate text-right", task.status === "error" ? "text-red-500" : "text-gray-500")}>
+                      {task.error || task.stage}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center gap-2">
+              {uploading && (
+                <button type="button" onClick={cancelUploads} className="text-xs text-gray-500 hover:text-red-600">
+                  取消上传
+                </button>
+              )}
+              {!uploading && tasks.some((task) => task.status === "error") && (
+                <button type="button" onClick={retryFailed} className="text-xs text-blue-600 hover:text-blue-700">
+                  重试失败文件
+                </button>
+              )}
             </div>
           </div>
         ) : error ? (
@@ -421,6 +763,7 @@ export function MultiFileUploader({
               {accept && (
                 <div className="text-xs text-gray-400 mt-0.5">支持格式：{accept}</div>
               )}
+              <div className="text-xs text-blue-500 mt-0.5">{storageLabel(storage)}</div>
               <div className="text-xs text-gray-400 mt-0.5">单文件上限 {maxSizeMB ?? (purpose === "skill" ? 200 : 100)}MB，超出请压缩后重试</div>
             </div>
           </div>

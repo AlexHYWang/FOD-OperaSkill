@@ -460,86 +460,100 @@ function buildDriveFileLinkFallback(fileToken: string): string | null {
   return `${base}/file/${fileToken}`;
 }
 
-// ─────────────────────────────────────────────
-// 云盘文件上传
-// ─────────────────────────────────────────────
-export async function uploadFileToDrive(
-  fileBuffer: Buffer,
+export interface DriveUploadPrepareResult {
+  upload_id: string;
+  block_size: number;
+  block_num: number;
+}
+
+export async function prepareDriveUpload(
   fileName: string,
-  mimeType: string,
+  size: number,
   folderToken: string
+): Promise<DriveUploadPrepareResult> {
+  const token = await getTenantAccessToken();
+  const started = Date.now();
+  const res = await fetch(`${FEISHU_BASE}/drive/v1/files/upload_prepare`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      file_name: fileName,
+      parent_type: "explorer",
+      parent_node: folderToken,
+      size,
+    }),
+  });
+  const data = await res.json();
+  console.info("[feishu/upload] prepare", {
+    fileName,
+    size,
+    code: data.code,
+    durationMs: Date.now() - started,
+  });
+  if (data.code !== 0) throw new Error(`上传初始化失败: ${data.msg}`);
+  return data.data as DriveUploadPrepareResult;
+}
+
+export async function uploadDrivePart(
+  uploadId: string,
+  seq: number,
+  chunk: Buffer,
+  mimeType: string,
+  fileName: string
+): Promise<void> {
+  const token = await getTenantAccessToken();
+  const started = Date.now();
+  const formData = new FormData();
+  formData.append("upload_id", uploadId);
+  formData.append("seq", String(seq));
+  formData.append("size", String(chunk.length));
+  const arrayBuffer = chunk.buffer.slice(
+    chunk.byteOffset,
+    chunk.byteOffset + chunk.byteLength
+  ) as ArrayBuffer;
+  formData.append("file", new Blob([arrayBuffer], { type: mimeType }), fileName);
+
+  const res = await fetch(`${FEISHU_BASE}/drive/v1/files/upload_part`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const data = await res.json();
+  console.info("[feishu/upload] part", {
+    seq,
+    size: chunk.length,
+    code: data.code,
+    durationMs: Date.now() - started,
+  });
+  if (data.code !== 0) throw new Error(`上传分片 ${seq} 失败: ${data.msg}`);
+}
+
+export async function finishDriveUpload(
+  uploadId: string,
+  blockNum: number
 ): Promise<{ file_token: string; url: string }> {
   const token = await getTenantAccessToken();
+  const started = Date.now();
+  const res = await fetch(`${FEISHU_BASE}/drive/v1/files/upload_finish`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ upload_id: uploadId, block_num: blockNum }),
+  });
+  const data = await res.json();
+  console.info("[feishu/upload] finish", {
+    blockNum,
+    code: data.code,
+    durationMs: Date.now() - started,
+  });
+  if (data.code !== 0) throw new Error(`完成上传失败: ${data.msg}`);
 
-  // 分片上传：先初始化
-  const initRes = await fetch(
-    `${FEISHU_BASE}/drive/v1/files/upload_prepare`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        file_name: fileName,
-        parent_type: "explorer",
-        parent_node: folderToken,
-        size: fileBuffer.length,
-      }),
-    }
-  );
-  const initData = await initRes.json();
-  if (initData.code !== 0) throw new Error(`上传初始化失败: ${initData.msg}`);
-
-  const { upload_id, block_size, block_num } = initData.data;
-
-  // 逐块上传
-  for (let i = 0; i < block_num; i++) {
-    const start = i * block_size;
-    const end = Math.min(start + block_size, fileBuffer.length);
-    const chunk = fileBuffer.slice(start, end);
-
-    const formData = new FormData();
-    formData.append("upload_id", upload_id);
-    formData.append("seq", String(i));
-    formData.append("size", String(chunk.length));
-    formData.append(
-      "file",
-      new Blob([chunk], { type: mimeType }),
-      fileName
-    );
-
-    const partRes = await fetch(
-      `${FEISHU_BASE}/drive/v1/files/upload_part`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      }
-    );
-    const partData = await partRes.json();
-    if (partData.code !== 0)
-      throw new Error(`上传分片 ${i} 失败: ${partData.msg}`);
-  }
-
-  // 完成上传
-  const finishRes = await fetch(
-    `${FEISHU_BASE}/drive/v1/files/upload_finish`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ upload_id, block_num }),
-    }
-  );
-  const finishData = await finishRes.json();
-  if (finishData.code !== 0)
-    throw new Error(`完成上传失败: ${finishData.msg}`);
-
-  const fileToken = finishData.data.file_token as string;
-
+  const fileToken = data.data.file_token as string;
   const webUrl =
     (await getDriveFileWebUrl(fileToken)) ?? buildDriveFileLinkFallback(fileToken);
 
@@ -550,6 +564,32 @@ export async function uploadFileToDrive(
   }
 
   return { file_token: fileToken, url: webUrl };
+}
+
+// ─────────────────────────────────────────────
+// 云盘文件上传
+// ─────────────────────────────────────────────
+export async function uploadFileToDrive(
+  fileBuffer: Buffer,
+  fileName: string,
+  mimeType: string,
+  folderToken: string
+): Promise<{ file_token: string; url: string }> {
+  const { upload_id, block_size, block_num } = await prepareDriveUpload(
+    fileName,
+    fileBuffer.length,
+    folderToken
+  );
+
+  // 逐块上传
+  for (let i = 0; i < block_num; i++) {
+    const start = i * block_size;
+    const end = Math.min(start + block_size, fileBuffer.length);
+    const chunk = fileBuffer.slice(start, end);
+    await uploadDrivePart(upload_id, i, chunk, mimeType, fileName);
+  }
+
+  return finishDriveUpload(upload_id, block_num);
 }
 
 export async function downloadFileFromDrive(
