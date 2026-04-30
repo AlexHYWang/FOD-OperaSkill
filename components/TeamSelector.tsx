@@ -1,23 +1,38 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ChevronDown, Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PRESET_TEAMS } from "@/lib/constants";
 
+/** 与场景梳理「当前视图」一致：引导用户注意右上角团队切换（仅工作台页启用） */
+const TEAM_SWITCH_HINT_KEY = "fod-team-switch-workbench-hint-seen";
+
 interface TeamSelectorProps {
   value: string;
   onChange: (team: string) => void;
   disabled?: boolean;
+  /** 我的工作台：呼吸灯引导 + 首次展开下拉即视为已引导 */
+  pulseWorkbenchHint?: boolean;
 }
 
-export function TeamSelector({ value, onChange, disabled }: TeamSelectorProps) {
+export function TeamSelector({ value, onChange, disabled, pulseWorkbenchHint }: TeamSelectorProps) {
   const [teams, setTeams] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [newTeam, setNewTeam] = useState("");
   const [adding, setAdding] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showPulse, setShowPulse] = useState(false);
+
+  const dismissPulse = useCallback(() => {
+    setShowPulse(false);
+    try {
+      localStorage.setItem(TEAM_SWITCH_HINT_KEY, "1");
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/bitable/teams")
@@ -27,9 +42,32 @@ export function TeamSelector({ value, onChange, disabled }: TeamSelectorProps) {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!pulseWorkbenchHint || typeof window === "undefined") {
+      setShowPulse(false);
+      return;
+    }
+    try {
+      if (localStorage.getItem(TEAM_SWITCH_HINT_KEY)) {
+        setShowPulse(false);
+        return;
+      }
+    } catch {
+      return;
+    }
+    setShowPulse(true);
+    const t = setTimeout(() => dismissPulse(), 6000);
+    return () => clearTimeout(t);
+  }, [pulseWorkbenchHint, dismissPulse]);
+
+  useEffect(() => {
+    if (open && showPulse) dismissPulse();
+  }, [open, showPulse, dismissPulse]);
+
   const handleSelect = (team: string) => {
     onChange(team);
     setOpen(false);
+    dismissPulse();
   };
 
   const handleAddTeam = () => {
@@ -42,11 +80,13 @@ export function TeamSelector({ value, onChange, disabled }: TeamSelectorProps) {
     setNewTeam("");
     setAdding(false);
     setOpen(false);
+    dismissPulse();
   };
 
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => !disabled && setOpen(!open)}
         disabled={disabled}
         className={cn(
@@ -54,7 +94,8 @@ export function TeamSelector({ value, onChange, disabled }: TeamSelectorProps) {
           "hover:border-blue-400 hover:bg-blue-50 transition-colors",
           "focus:outline-none focus:ring-2 focus:ring-blue-500",
           disabled && "opacity-50 cursor-not-allowed",
-          value && "border-blue-400 bg-blue-50 text-blue-700"
+          value && "border-blue-400 bg-blue-50 text-blue-700",
+          showPulse && pulseWorkbenchHint && "ring-2 ring-blue-400 animate-pulse"
         )}
       >
         <span className="flex items-center gap-2">

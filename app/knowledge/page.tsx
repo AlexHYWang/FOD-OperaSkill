@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   BookOpen,
   Check,
@@ -52,6 +52,7 @@ interface SceneOption {
 
 export default function KnowledgePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoggedIn, loading, team, setTeam, profile } = useAuth();
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>("review");
@@ -59,6 +60,7 @@ export default function KnowledgePage() {
   const [refreshing, setRefreshing] = useState(false);
 
   // 筛选
+  const [filterScene, setFilterScene] = useState("");
   const [filterProcess, setFilterProcess] = useState("");
   const [filterNode, setFilterNode] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -66,6 +68,15 @@ export default function KnowledgePage() {
   useEffect(() => {
     if (!loading && !isLoggedIn) router.push("/");
   }, [loading, isLoggedIn, router]);
+
+  useEffect(() => {
+    const scene = searchParams.get("scene")?.trim();
+    if (scene) setFilterScene(scene);
+    const tab = searchParams.get("tab");
+    if (tab === "submit" || tab === "review" || tab === "published" || tab === "history") {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   const load = async () => {
     setRefreshing(true);
@@ -93,11 +104,17 @@ export default function KnowledgePage() {
 
   const filtered = useMemo(() => {
     return tabBase.filter((i) =>
+      (!filterScene || i.scene === filterScene) &&
       (!filterProcess || i.process === filterProcess) &&
       (!filterNode || i.node === filterNode) &&
       (!filterStatus || i.status === filterStatus)
     );
-  }, [tabBase, filterProcess, filterNode, filterStatus]);
+  }, [tabBase, filterScene, filterProcess, filterNode, filterStatus]);
+
+  const sceneOptions = useMemo(
+    () => Array.from(new Set(items.map((i) => i.scene).filter(Boolean))).sort(),
+    [items]
+  );
 
   const processOptions = useMemo(
     () => Array.from(new Set(tabBase.map((i) => i.process).filter(Boolean))),
@@ -138,7 +155,7 @@ export default function KnowledgePage() {
     return <div className="min-h-screen flex items-center justify-center">加载中...</div>;
   }
 
-  const hasFilter = filterProcess || filterNode || filterStatus;
+  const hasFilter = filterScene || filterProcess || filterNode || filterStatus;
 
   return (
     <AppLayout team={team} onTeamChange={setTeam} user={user}>
@@ -193,10 +210,16 @@ export default function KnowledgePage() {
             ))}
           </div>
 
-          {/* 筛选栏 */}
-          {tabBase.length > 0 && (
+          {/* 筛选栏（有数据即显示，便于 URL 带入场景后切换 Tab） */}
+          {items.length > 0 && (
             <div className="px-4 py-2 border-b bg-gray-50 flex flex-wrap items-center gap-2">
               <span className="text-xs text-gray-500 font-medium">筛选：</span>
+              <SelectFilter
+                label="所有场景"
+                value={filterScene}
+                options={sceneOptions}
+                onChange={setFilterScene}
+              />
               <SelectFilter
                 label="所有流程"
                 value={filterProcess}
@@ -218,7 +241,13 @@ export default function KnowledgePage() {
               />
               {hasFilter && (
                 <button
-                  onClick={() => { setFilterProcess(""); setFilterNode(""); setFilterStatus(""); }}
+                  type="button"
+                  onClick={() => {
+                    setFilterScene("");
+                    setFilterProcess("");
+                    setFilterNode("");
+                    setFilterStatus("");
+                  }}
                   className="text-xs text-gray-400 hover:text-rose-500 px-2 py-0.5 rounded hover:bg-rose-50"
                 >
                   清除

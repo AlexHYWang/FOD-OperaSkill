@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   Bell,
   BookOpen,
-  ChevronDown,
   Download,
   FilePlus2,
   Filter,
@@ -19,6 +18,7 @@ import {
   UploadCloud,
   X,
   Zap,
+  HelpCircle,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import {
@@ -30,6 +30,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
 import { E2E_PROCESSES, normalizeE2EProcessShortName } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { extractUrl } from "@/lib/record-utils";
+import { SelectWithChevron } from "@/components/SelectWithChevron";
 
 const EVALUATION_UPLOAD_STORAGE: UploadStorage =
   process.env.NEXT_PUBLIC_EVALUATION_UPLOAD_STORAGE === "vercel-blob"
@@ -37,6 +39,21 @@ const EVALUATION_UPLOAD_STORAGE: UploadStorage =
     : process.env.NEXT_PUBLIC_EVALUATION_UPLOAD_STORAGE === "feishu-api"
       ? "feishu-api"
       : "feishu-chunked";
+
+/** 评测集 A/C 资料释义（与多维表格字段「输入A样本」「人工输出C结果」对应） */
+const AC_MATERIAL_HELP_A =
+  "指除知识库沉淀物（字典、规则、模板等）外，在本场景下为得到目标产物 C 所必需的输入类数据文件（如原始表、台账、报送底稿等）。";
+const AC_MATERIAL_HELP_C =
+  "本场景 SKILL 期望产出的产物 C 的人工基准版本，用作线下/线上评测对比时的「标准答案」。";
+const AC_MATERIAL_HELP_PAIR =
+  "A 与 C 必须对应同一套覆盖范围（与评测集组合中的覆盖范围说明一致，如主体、期间、样本口径等），否则对比无意义。";
+const AC_MATERIAL_HINT_SHORT_A =
+  "必要输入数据，详见弹窗顶部说明；不含知识库字典、规则、模板类资料。";
+const AC_MATERIAL_HINT_SHORT_C =
+  "产物 C 的人工基准，须与上方 A 样本及本评测集覆盖范围一致。";
+const AC_MATERIAL_BUTTON_TITLE =
+  "管理输入 A 样本与人工输出 C 结果；须与本评测集覆盖范围（主体、期间等）一致。";
+const AC_MATERIAL_CARD_TOOLTIP = `A：${AC_MATERIAL_HELP_A}\n\nC：${AC_MATERIAL_HELP_C}\n\n${AC_MATERIAL_HELP_PAIR}`;
 
 interface Dataset {
   id: string;
@@ -62,12 +79,18 @@ interface Material {
 interface SkillRecord {
   scene: string;
   version: string;
+  fileUrl: string;
+  fileName: string;
+  fileToken: string;
 }
 
 interface KnowledgeRecord {
   scene: string;
   node: string;
   version: string;
+  fileUrl: string;
+  fileName: string;
+  fileToken: string;
 }
 
 interface UserSearchResult {
@@ -168,29 +191,70 @@ export default function EvaluationPage() {
     );
     setMaterials(mats);
 
-    // 加载 SKILL 版本
+    // 加载 SKILL：按场景取提交时间最新一条，并带出文件链接
     const skillData = await fetch(`/api/bitable/records?table=2&team=${encodeURIComponent(team)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ records: [] }));
-    const sm: Record<string, SkillRecord> = {};
+    type SkillAgg = SkillRecord & { lastTs: number };
+    const smAgg: Record<string, SkillAgg> = {};
     for (const rec of skillData.records || []) {
-      const scene = String(rec.fields["所属场景"] || rec.fields["关联任务"] || "");
-      const version = String(rec.fields["版本号"] || "v1.0");
-      const ts = Number(rec.fields["提交时间"] || 0);
-      if (scene && (!sm[scene] || ts > (sm[scene] as unknown as { ts: number }).ts)) {
-        sm[scene] = { scene, version };
+      const f = rec.fields as Record<string, unknown>;
+      const scene = String(f["所属场景"] || f["关联任务"] || "");
+      if (!scene) continue;
+      const ts = Number(f["提交时间"] || 0) || 0;
+      const prev = smAgg[scene];
+      if (!prev || ts >= prev.lastTs) {
+        smAgg[scene] = {
+          scene,
+          version: String(f["版本号"] || "v1.0"),
+          fileUrl: extractUrl(f["SKILL文件链接"]),
+          fileName: String(f["SKILL文件名"] || ""),
+          fileToken: String(f["SKILL文件Token"] || ""),
+          lastTs: ts,
+        };
       }
+    }
+    const sm: Record<string, SkillRecord> = {};
+    for (const k of Object.keys(smAgg)) {
+      const { lastTs: _t, ...row } = smAgg[k];
+      sm[k] = row;
     }
     setSkillMap(sm);
 
-    // 加载知识库版本
+    // 加载知识库当前版本：按场景（或节点键）取时间最新一条
     const kmData = await fetch(`/api/bitable/records?table=7&team=${encodeURIComponent(team)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ records: [] }));
-    const km: Record<string, KnowledgeRecord> = {};
+    const kbTs = (f: Record<string, unknown>) => {
+      const pub = Number(f["发布时间"] || 0);
+      const sub = Number(f["提交时间"] || 0);
+      return Math.max(Number.isFinite(pub) ? pub : 0, Number.isFinite(sub) ? sub : 0);
+    };
+    type KbAgg = KnowledgeRecord & { lastTs: number };
+    const kmAgg: Record<string, KbAgg> = {};
+    const upsertKb = (key: string, row: KnowledgeRecord, ts: number) => {
+      const prev = kmAgg[key];
+      if (!prev || ts >= prev.lastTs) {
+        kmAgg[key] = { ...row, lastTs: ts };
+      }
+    };
     for (const rec of kmData.records || []) {
-      const scene = String(rec.fields["关联场景名"] || "");
-      const node = String(rec.fields["流程节点"] || "");
-      const version = String(rec.fields["版本号"] || "v1");
-      const isCurrent = rec.fields["是否当前版本"] === true;
-      if (isCurrent && scene) km[scene] = { scene, node, version };
-      else if (isCurrent && node && !km[node]) km[node] = { scene: "", node, version };
+      const f = rec.fields as Record<string, unknown>;
+      const isCurrent = f["是否当前版本"] === true;
+      if (!isCurrent) continue;
+      const scene = String(f["关联场景名"] || "");
+      const node = String(f["流程节点"] || "");
+      const version = String(f["版本号"] || "v1");
+      const fileUrl = extractUrl(f["文件链接"]);
+      const fileName = String(f["文件名称"] || f["条目标题"] || "");
+      const fileToken = String(f["文件Token"] || "");
+      const ts = kbTs(f);
+      if (scene) {
+        upsertKb(scene, { scene, node, version, fileUrl, fileName, fileToken }, ts);
+      } else if (node) {
+        upsertKb(node, { scene: "", node, version, fileUrl, fileName, fileToken }, ts);
+      }
+    }
+    const km: Record<string, KnowledgeRecord> = {};
+    for (const k of Object.keys(kmAgg)) {
+      const { lastTs: _t, ...row } = kmAgg[k];
+      km[k] = row;
     }
     setKnowledgeMap(km);
   };
@@ -208,7 +272,7 @@ export default function EvaluationPage() {
   const getVersionInfo = (dataset: Dataset) => {
     const skill = skillMap[dataset.scene];
     const knowledge = knowledgeMap[dataset.scene] || knowledgeMap[dataset.node];
-    return { skillVersion: skill?.version, knowledgeVersion: knowledge?.version };
+    return { skill, knowledge };
   };
 
   const getUsabilityWarnings = (dataset: Dataset) => {
@@ -256,7 +320,9 @@ export default function EvaluationPage() {
               <FlaskConical size={18} /> 评测集管理中心
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mt-1 tracking-tight">评测集上传与 A/C 资料管理</h1>
-            <p className="text-sm text-gray-500 mt-1 max-w-2xl">每条评测集组合包含输入 A 样本与人工输出 C 结果；卡片标题优先展示<strong className="text-gray-700">覆盖范围</strong>便于识别。</p>
+            <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+              维护本团队各场景下的评测集组合，并管理每条组合用于评测的 A/C 资料与相关操作。
+            </p>
           </div>
           <div className="flex gap-2 flex-wrap shrink-0">
             <Button variant="outline" onClick={load}><RefreshCw size={14} className="mr-1" /> 刷新</Button>
@@ -323,7 +389,9 @@ export default function EvaluationPage() {
               <div className="py-10 text-center text-sm text-gray-500">当前筛选下无匹配评测集，请调整或清空筛选条件。</div>
             ) : (
               filteredDatasets.map((d) => {
-                const { skillVersion, knowledgeVersion } = getVersionInfo(d);
+                const { skill, knowledge } = getVersionInfo(d);
+                const skillVersion = skill?.version;
+                const knowledgeVersion = knowledge?.version;
                 const warnings = getUsabilityWarnings(d);
                 const mats = materials[d.id] || [];
                 const aCount = mats.filter((m) => m.panel === "输入A样本").length;
@@ -371,28 +439,84 @@ export default function EvaluationPage() {
                               {[d.process, d.section, d.node].filter(Boolean).join(" · ")}
                             </div>
                           )}
-                          <div className="text-gray-400 pt-0.5">A 样本 {aCount} · C 结果 {cCount}</div>
+                          <div
+                            className="text-gray-400 pt-0.5 inline-flex items-center gap-1 max-w-full"
+                            title={AC_MATERIAL_CARD_TOOLTIP}
+                          >
+                            <span>A 样本 {aCount} · C 结果 {cCount}</span>
+                            <HelpCircle size={12} className="text-gray-400 shrink-0 cursor-help" aria-hidden />
+                          </div>
                         </div>
                       </div>
                       <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
                         <div className="flex flex-wrap justify-end gap-1.5">
                           {skillVersion ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[11px]">
+                            <button
+                              type="button"
+                              title={
+                                skill?.fileUrl
+                                  ? "在新标签页打开 SKILL 文件"
+                                  : "暂无文件链接，请到端到端作业或工作台上传 SKILL"
+                              }
+                              onClick={() => {
+                                if (skill?.fileUrl) {
+                                  window.open(skill.fileUrl, "_blank", "noopener,noreferrer");
+                                } else {
+                                  alert("当前场景 SKILL 暂无文件链接，请到端到端作业或工作台上传。");
+                                }
+                              }}
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium transition-colors",
+                                skill?.fileUrl
+                                  ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 cursor-pointer"
+                                  : "bg-purple-50/60 text-purple-600/80 border-purple-200/70 hover:bg-purple-100/80 cursor-pointer"
+                              )}
+                            >
                               <Zap size={10} /> SKILL {skillVersion}
-                            </span>
+                            </button>
                           ) : (
                             <span className="text-[11px] text-gray-400 px-1">SKILL 未上传</span>
                           )}
                           {knowledgeVersion ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px]">
+                            <button
+                              type="button"
+                              title={
+                                knowledge?.fileUrl
+                                  ? "在新标签页打开当前版本知识库文件"
+                                  : "暂无单文件链接，前往知识库管理中心查看本场景条目"
+                              }
+                              onClick={() => {
+                                if (knowledge?.fileUrl) {
+                                  window.open(knowledge.fileUrl, "_blank", "noopener,noreferrer");
+                                } else {
+                                  router.push(`/knowledge?scene=${encodeURIComponent(d.scene)}`);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-medium hover:bg-indigo-100 cursor-pointer"
+                            >
                               <BookOpen size={10} /> 知识库 {knowledgeVersion}
-                            </span>
+                            </button>
                           ) : (
                             <span className="text-[11px] text-gray-400 px-1">知识库未发布</span>
                           )}
                         </div>
                         <div className="flex flex-wrap justify-end gap-2">
-                          <Button size="sm" variant="outline" onClick={() => setShowMaterialForm(d)}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="前往知识库管理中心，补充字典、规则、模版等资料（按本场景筛选）"
+                            onClick={() =>
+                              router.push(`/knowledge?scene=${encodeURIComponent(d.scene)}`)
+                            }
+                          >
+                            <BookOpen size={13} className="mr-1" /> 去知识库补资料
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title={AC_MATERIAL_BUTTON_TITLE}
+                            onClick={() => setShowMaterialForm(d)}
+                          >
                             <FilePlus2 size={13} className="mr-1" /> 追加/查看 A/C 资料
                           </Button>
                           <Button
@@ -740,21 +864,52 @@ function MaterialForm({
     onDone();
   };
 
-  const materialModalTitle = dataset.coverage?.trim()
-    ? `A/C 资料管理：${dataset.coverage} — ${dataset.name}`
-    : `A/C 资料管理：${dataset.name}`;
+  const coverageTrim = (dataset.coverage || "").trim();
+  const materialModalTitle = (
+    <div className="space-y-1.5 min-w-0 text-left">
+      <div className="text-base font-semibold text-gray-900 leading-snug">A/C 资料管理</div>
+      <div className="text-xs text-gray-600 leading-snug break-words">
+        <span className="text-gray-500 font-medium">覆盖范围 </span>
+        {coverageTrim
+          ? coverageTrim
+          : "未填写覆盖范围；上传时仍请与本评测集口径（主体、期间、样本口径等）保持一致。"}
+      </div>
+      <div className="text-sm text-gray-800 font-medium leading-snug break-words">
+        评测集：{dataset.name}
+      </div>
+      {dataset.scene ? (
+        <div className="text-xs text-gray-500 leading-snug break-words">场景：{dataset.scene}</div>
+      ) : null}
+    </div>
+  );
 
   return (
     <Modal title={materialModalTitle} onClose={onClose}>
       <div className="space-y-4">
+        <div className="rounded-lg border border-teal-200/80 bg-teal-50/60 px-3 py-2.5 text-xs text-gray-700 space-y-1.5 leading-relaxed">
+          <div>
+            <span className="font-semibold text-teal-900">A（输入 A 样本）</span>
+            {AC_MATERIAL_HELP_A}
+          </div>
+          <div>
+            <span className="font-semibold text-teal-900">C（人工输出 C 结果）</span>
+            {AC_MATERIAL_HELP_C}
+          </div>
+          <div className="text-gray-600 border-t border-teal-100/80 pt-1.5 mt-1.5">{AC_MATERIAL_HELP_PAIR}</div>
+        </div>
+
         {/* 历史资料预览 */}
         {localMaterials.length > 0 && (
           <div className="space-y-2">
             <div className="text-xs font-semibold text-gray-600">已上传资料</div>
-            {[{ label: "输入A样本", list: existingA }, { label: "人工输出C结果", list: existingC }].map(({ label, list }) => (
+            {[
+              { key: "a", displayLabel: "输入 A 样本", hint: AC_MATERIAL_HINT_SHORT_A, list: existingA },
+              { key: "c", displayLabel: "人工输出 C 结果", hint: AC_MATERIAL_HINT_SHORT_C, list: existingC },
+            ].map(({ key, displayLabel, hint, list }) => (
               list.length > 0 && (
-                <div key={label}>
-                  <div className="text-[11px] font-medium text-gray-500 mb-1">{label}</div>
+                <div key={key}>
+                  <div className="text-[11px] font-medium text-gray-700 mb-0.5">{displayLabel}</div>
+                  <div className="text-[11px] text-gray-500 mb-1 leading-snug">{hint}</div>
                   {list.map((m) => (
                     <div key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded border bg-gray-50 text-xs">
                       <span className="flex-1 truncate text-gray-700">{m.fileName || m.fileUrl}</span>
@@ -780,9 +935,10 @@ function MaterialForm({
 
         {/* 新上传 A 样本 */}
         <div className="border-t pt-3">
-          <div className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1">
-            <UploadCloud size={13} /> 追加 - 输入A样本
+          <div className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+            <UploadCloud size={13} /> 追加 - 输入 A 样本
           </div>
+          <p className="text-[11px] text-gray-500 mb-2 mt-0.5 leading-snug">{AC_MATERIAL_HINT_SHORT_A}</p>
           <input value={linkA} onChange={(e) => setLinkA(e.target.value)} placeholder="飞书云文档链接（可选）" className="w-full rounded border px-3 py-2 text-sm mb-2" />
           <MultiFileUploader
             label="本地文件（可多选）"
@@ -795,9 +951,10 @@ function MaterialForm({
 
         {/* 新上传 C 结果 */}
         <div className="border-t pt-3">
-          <div className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1">
-            <UploadCloud size={13} /> 追加 - 人工输出C结果
+          <div className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+            <UploadCloud size={13} /> 追加 - 人工输出 C 结果
           </div>
+          <p className="text-[11px] text-gray-500 mb-2 mt-0.5 leading-snug">{AC_MATERIAL_HINT_SHORT_C}</p>
           <input value={linkC} onChange={(e) => setLinkC(e.target.value)} placeholder="飞书云文档链接（可选）" className="w-full rounded border px-3 py-2 text-sm mb-2" />
           <MultiFileUploader
             label="本地文件（可多选）"
@@ -1000,42 +1157,26 @@ function ReminderForm({
 }
 
 // ─── 通用子组件 ───
-function SelectWithChevron({
-  value, onChange, placeholder, disabled, children,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        className={cn(
-          "w-full appearance-none rounded border px-3 py-2 text-sm pr-8 focus:outline-none focus:ring-2 focus:ring-teal-300",
-          disabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white text-gray-700"
-        )}
-      >
-        <option value="">{placeholder}</option>
-        {children}
-      </select>
-      <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-    </div>
-  );
-}
-
 function Modal({ title, children, onClose }: { title: ReactNode; children: ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-auto">
-        <div className="px-5 py-3 border-b flex items-start gap-2 sticky top-0 bg-white z-10">
-          <div className="font-semibold text-sm sm:text-base leading-snug pr-2 flex-1 min-w-0 break-words">{title}</div>
-          <div className="flex-1" />
-          <button onClick={onClose}><X size={16} /></button>
+        <div className="px-5 py-3 border-b flex items-start justify-between gap-3 sticky top-0 bg-white z-10">
+          <div className="flex-1 min-w-0">
+            {typeof title === "string" ? (
+              <div className="font-semibold text-sm sm:text-base leading-snug break-words pr-1 text-gray-900">{title}</div>
+            ) : (
+              title
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 p-1 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+            aria-label="关闭"
+          >
+            <X size={16} />
+          </button>
         </div>
         <div className="p-5">{children}</div>
       </div>

@@ -77,12 +77,19 @@ const TONE_CLASS: Record<string, string> = {
 };
 
 export default function WorkbenchPage() {
-  const { user, isLoggedIn, loading, team, setTeam, profile } = useAuth();
+  const { user, isLoggedIn, loading, team, setTeam, profile, profileLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading && !isLoggedIn) router.push("/");
   }, [loading, isLoggedIn, router]);
+
+  /** 进入工作台且尚未有查看团队时，与 Auth 一致默认落到人员权限表中的归属团队 */
+  useEffect(() => {
+    if (profileLoading || !profile.team) return;
+    if (team) return;
+    setTeam(profile.team);
+  }, [profileLoading, profile.team, team, setTeam]);
 
   if (loading || !isLoggedIn || !user) {
     return (

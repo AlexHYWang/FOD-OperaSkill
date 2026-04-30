@@ -134,7 +134,20 @@ export function AppLayout({ children, team, onTeamChange, user }: AppLayoutProps
 
           <div className="flex-1" />
 
-          {user && <TeamSelector value={team} onChange={onTeamChange} />}
+          {user && (
+            <div className="flex flex-col items-end gap-0.5 shrink-0 max-w-[min(100vw-10rem,280px)]">
+              <TeamSelector
+                value={team}
+                onChange={onTeamChange}
+                pulseWorkbenchHint={pathname === "/workbench"}
+              />
+              {pathname === "/workbench" && (
+                <p className="text-[10px] text-gray-500 text-right leading-snug max-w-[260px] hidden sm:block">
+                  默认数据视角为<strong className="text-gray-700">归属团队</strong>（人员权限表）；仅能编辑本团队资料，切换至其他团队时一般仅可查看与下载。
+                </p>
+              )}
+            </div>
+          )}
 
           {user && (
             <div className="flex items-center gap-2">

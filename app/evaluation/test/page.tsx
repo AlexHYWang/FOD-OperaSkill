@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ChevronRight, Download, FlaskConical, Loader2, Search, UploadCloud, X,
+  ChevronRight, Download, Filter, FlaskConical, Loader2, Search, UploadCloud, X,
 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
+import { SelectWithChevron } from "@/components/SelectWithChevron";
 import { MultiFileUploader, type UploadedFile } from "@/components/FileUploader";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
@@ -34,6 +35,18 @@ export default function EvaluationTestPage() {
   const [scene, setScene] = useState(sp?.get("scene") || "");
   const [showUpload, setShowUpload] = useState(false);
   const [search, setSearch] = useState("");
+  const [filterProcess, setFilterProcess] = useState("");
+  const [filterSection, setFilterSection] = useState("");
+  const [filterNode, setFilterNode] = useState("");
+
+  useEffect(() => {
+    setFilterSection("");
+    setFilterNode("");
+  }, [filterProcess]);
+
+  useEffect(() => {
+    setFilterNode("");
+  }, [filterSection]);
 
   useEffect(() => {
     if (!loading && !isLoggedIn) router.push("/");
@@ -55,17 +68,47 @@ export default function EvaluationTestPage() {
     if (selected?.scene) setScene(selected.scene);
   }, [selected?.scene]);
 
+  const cascadeFiltered = useMemo(
+    () =>
+      datasets.filter((d) => {
+        if (filterProcess && d.process !== filterProcess) return false;
+        if (filterSection && d.section !== filterSection) return false;
+        if (filterNode && d.node !== filterNode) return false;
+        return true;
+      }),
+    [datasets, filterProcess, filterSection, filterNode]
+  );
+
+  const processFilterOptions = useMemo(
+    () => Array.from(new Set(datasets.map((d) => d.process).filter(Boolean))).sort(),
+    [datasets]
+  );
+
+  const sectionFilterOptions = useMemo(() => {
+    const pool = filterProcess ? datasets.filter((d) => d.process === filterProcess) : datasets;
+    return Array.from(new Set(pool.map((d) => d.section).filter(Boolean))).sort();
+  }, [datasets, filterProcess]);
+
+  const nodeFilterOptions = useMemo(() => {
+    let pool = datasets;
+    if (filterProcess) pool = pool.filter((d) => d.process === filterProcess);
+    if (filterSection) pool = pool.filter((d) => d.section === filterSection);
+    return Array.from(new Set(pool.map((d) => d.node).filter(Boolean))).sort();
+  }, [datasets, filterProcess, filterSection]);
+
   const filteredDatasets = useMemo(() => {
-    if (!search.trim()) return datasets;
+    if (!search.trim()) return cascadeFiltered;
     const q = search.toLowerCase();
-    return datasets.filter(
+    return cascadeFiltered.filter(
       (d) =>
         d.name.toLowerCase().includes(q) ||
         d.scene.toLowerCase().includes(q) ||
         d.process.toLowerCase().includes(q) ||
-        d.section.toLowerCase().includes(q)
+        d.section.toLowerCase().includes(q) ||
+        d.node.toLowerCase().includes(q) ||
+        (d.coverage || "").toLowerCase().includes(q)
     );
-  }, [datasets, search]);
+  }, [cascadeFiltered, search]);
 
   if (loading || !isLoggedIn || !user) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 size={20} className="animate-spin text-gray-400" /></div>;
@@ -94,51 +137,129 @@ export default function EvaluationTestPage() {
         <div className="flex-1 overflow-auto">
           <div className="flex h-full divide-x">
             {/* 左栏：选择评测集 */}
-            <div className="w-80 flex-shrink-0 flex flex-col bg-gray-50">
-              <div className="p-3 border-b bg-white">
+            <div className="w-96 flex-shrink-0 flex flex-col bg-gray-50">
+              <div className="p-3 border-b bg-white space-y-2">
                 <div className="relative">
                   <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="搜索评测集..."
+                    placeholder="搜索评测集名称、覆盖范围、场景或流程…"
                     className="w-full pl-7 pr-3 py-1.5 text-sm border rounded-lg bg-gray-50 focus:outline-none focus:ring-1 focus:ring-amber-400"
                   />
                 </div>
+                {datasets.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1 text-[11px] text-gray-500">
+                      <Filter size={12} /> 筛选
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      <SelectWithChevron
+                        value={filterProcess}
+                        onChange={setFilterProcess}
+                        placeholder="端到端流程"
+                        selectClassName="focus:ring-amber-400 py-1.5 text-xs"
+                      >
+                        {processFilterOptions.map((p) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </SelectWithChevron>
+                      <SelectWithChevron
+                        value={filterSection}
+                        onChange={setFilterSection}
+                        placeholder="流程环节"
+                        selectClassName="focus:ring-amber-400 py-1.5 text-xs"
+                      >
+                        {sectionFilterOptions.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </SelectWithChevron>
+                      <SelectWithChevron
+                        value={filterNode}
+                        onChange={setFilterNode}
+                        placeholder="流程节点"
+                        selectClassName="focus:ring-amber-400 py-1.5 text-xs"
+                      >
+                        {nodeFilterOptions.map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </SelectWithChevron>
+                    </div>
+                    {(filterProcess || filterSection || filterNode) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[11px] text-gray-600 w-full"
+                        onClick={() => {
+                          setFilterProcess("");
+                          setFilterSection("");
+                          setFilterNode("");
+                        }}
+                      >
+                        清空筛选
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {loadingDatasets ? (
                   <div className="flex items-center justify-center py-10 text-gray-400 gap-2">
                     <Loader2 size={14} className="animate-spin" /> 加载中...
                   </div>
-                ) : filteredDatasets.length === 0 ? (
-                  <div className="text-center py-10 text-xs text-gray-400">
-                    {search ? "未找到匹配评测集" : "当前团队暂无评测集"}
+                ) : datasets.length === 0 ? (
+                  <div className="text-center py-10 text-xs text-gray-400">当前团队暂无评测集</div>
+                ) : cascadeFiltered.length === 0 ? (
+                  <div className="text-center py-10 text-xs text-gray-500 px-2">
+                    当前筛选下无匹配评测集，请调整或清空筛选条件。
                   </div>
+                ) : filteredDatasets.length === 0 ? (
+                  <div className="text-center py-10 text-xs text-gray-400">未找到匹配评测集，请尝试其他关键词。</div>
                 ) : (
-                  filteredDatasets.map((d) => (
-                    <button
-                      key={d.id}
-                      onClick={() => setSelectedId(d.id)}
-                      className={cn(
-                        "w-full text-left rounded-xl px-3 py-2.5 transition-all border text-sm",
-                        d.id === selectedId
-                          ? "bg-amber-50 border-amber-300 shadow-sm"
-                          : "bg-white border-gray-200 hover:border-amber-200 hover:bg-amber-50/30"
-                      )}
-                    >
-                      <div className="font-medium text-gray-900 truncate">{d.name}</div>
-                      <div className="flex items-center gap-1 mt-1 text-[11px] text-gray-500">
-                        {d.process && (
-                          <span className="bg-gray-100 rounded px-1 py-0.5 font-medium text-gray-600">{d.process}</span>
+                  filteredDatasets.map((d) => {
+                    const titlePrimary = (d.coverage || "").trim() || d.name;
+                    const titleSecondary = (d.coverage || "").trim() ? d.name : "";
+                    const showSceneLine = !titleSecondary && !!d.scene;
+                    return (
+                      <button
+                        key={d.id}
+                        onClick={() => setSelectedId(d.id)}
+                        className={cn(
+                          "w-full text-left rounded-xl px-3 py-2.5 transition-all border text-sm",
+                          d.id === selectedId
+                            ? "bg-amber-50 border-amber-300 shadow-sm"
+                            : "bg-white border-gray-200 hover:border-amber-200 hover:bg-amber-50/30"
                         )}
-                        {d.section && <span className="truncate">{d.section}</span>}
-                        {d.section && d.node && <span className="text-gray-300">›</span>}
-                        {d.node && <span className="truncate">{d.node}</span>}
-                      </div>
-                      <div className="text-[11px] text-gray-400 truncate mt-0.5">{d.scene}</div>
-                    </button>
-                  ))
+                      >
+                        <div
+                          className="font-medium text-gray-900 line-clamp-2 leading-snug"
+                          title={titlePrimary}
+                        >
+                          {titlePrimary}
+                        </div>
+                        {titleSecondary ? (
+                          <div className="text-xs text-gray-500 line-clamp-1 mt-0.5" title={titleSecondary}>
+                            {titleSecondary}
+                          </div>
+                        ) : showSceneLine ? (
+                          <div className="text-xs text-gray-500 line-clamp-1 mt-0.5">场景：{d.scene}</div>
+                        ) : null}
+                        {(d.process || d.section || d.node) ? (
+                          <div className="flex items-center gap-1 mt-1 text-[11px] text-gray-500 min-w-0">
+                            {d.process && (
+                              <span className="bg-gray-100 rounded px-1 py-0.5 font-medium text-gray-600 shrink-0">
+                                {d.process}
+                              </span>
+                            )}
+                            {d.section && <span className="truncate">{d.section}</span>}
+                            {d.section && d.node && <span className="text-gray-300 shrink-0">›</span>}
+                            {d.node && <span className="truncate">{d.node}</span>}
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </div>
